@@ -209,6 +209,8 @@ struct compat_disp_frame_cfg_t {
 
 	/* for panel HBM (High Backlight Mode) control */
 	bool hbm_en;
+	/*DynFPS*/
+	compat_int_t active_config;
 };
 
 struct compat_disp_session_info {
@@ -269,6 +271,7 @@ struct compat_disp_layer_info {
 	compat_int_t res_idx;
 	compat_uint_t hrt_weight;
 	compat_uint_t hrt_idx;
+	compat_int_t active_config_id[2];
 };
 
 struct _compat_disp_layer_info {
