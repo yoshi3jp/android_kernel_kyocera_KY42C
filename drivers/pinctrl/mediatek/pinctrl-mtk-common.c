@@ -2056,6 +2056,56 @@ static int mtk_gpio_create_attr(struct device *dev)
 }
 #endif
 
+static ssize_t kc_gpio3_show_pin(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	int len;
+	int w_value;
+	unsigned int bufLen = PAGE_SIZE;
+	struct mtk_pinctrl *pctl = dev_get_drvdata(dev);
+/**/
+	if (!pctl || !pctl->chip || !buf) {
+		return 0;
+	}
+
+	w_value = mtk_gpio_get( pctl->chip, 3 );
+
+	len = snprintf( buf, bufLen, "%1d\n", w_value );
+
+    pr_err( "%s %d len=%d w_value=%d\n", __func__, __LINE__, len, w_value );
+
+	return len;
+}
+
+static ssize_t kc_gpio3_store_pin(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	return 0;
+}
+
+static DEVICE_ATTR(gpio3, 0664, kc_gpio3_show_pin, kc_gpio3_store_pin);
+
+static struct device_attribute *kc_gpio3_attr_list[] = {
+	&dev_attr_gpio3,
+};
+
+static int kc_gpio3_create_attr(struct device *dev)
+{
+	int idx, err = 0;
+	int num = ARRAY_SIZE(kc_gpio3_attr_list);
+
+	if (!dev)
+		return -EINVAL;
+
+	for (idx = 0; idx < num; idx++) {
+		err = device_create_file(dev, kc_gpio3_attr_list[idx]);
+		if (err)
+			break;
+	}
+
+	return err;
+}
+
 static struct gpio_chip mtk_gpio_chip = {
 	.owner			= THIS_MODULE,
 	.request		= gpiochip_generic_request,
@@ -2673,6 +2723,8 @@ int mtk_pctrl_init(struct platform_device *pdev,
 	if (mtk_gpio_create_attr(&pdev->dev))
 		pr_warn("[pinctrl]mtk_gpio create attribute error\n");
 #endif
+	if (kc_gpio3_create_attr(&pdev->dev))
+		pr_warn("[pinctrl]gpio3 create attribute error\n");
 
 	if (!of_property_read_bool(np, "interrupt-controller")) {
 		pr_warn("[pinctrl]init:interrupt-controller node no found\n");
