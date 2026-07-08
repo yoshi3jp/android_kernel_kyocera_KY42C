@@ -961,7 +961,8 @@ dtb-$(CONFIG_KC_PC9359) +=  \
 	mt6761-FLARE04[0410].dtb \
 	mt6761-FLARE04[0430].dtb \
 	mt6761-FLARE05[0500].dtb \
-	mt6761-FLARE05[0510].dtb
+	mt6761-FLARE05[0510].dtb \
+	mt6761-FLARE04[0471].dtb
 endif
 
 dtstree		:= $(srctree)/$(src)
