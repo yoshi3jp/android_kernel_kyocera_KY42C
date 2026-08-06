@@ -1,4 +1,8 @@
 /*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2022 KYOCERA Corporation
+ */
+/*
  * Copyright (C) 2016 MediaTek Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -32,6 +36,10 @@
 #define VIB_DEVICE				"mtk_vibrator"
 #define VIB_TAG                                 "[vibrator]"
 
+#define SENSOR_VIB_INTERLOCKING
+
+#define VIB_TIMEOUT_MS  600000
+
 struct mt_vibr {
 	struct workqueue_struct *vibr_queue;
 	struct work_struct vibr_work;
@@ -45,11 +53,19 @@ struct mt_vibr {
 
 static struct mt_vibr *g_mt_vib;
 
+#ifdef SENSOR_VIB_INTERLOCKING
+static void vibrator_send_uevent(int on);
+#endif
+
 static int vibr_Enable(void)
 {
 	if (!g_mt_vib->ldo_state) {
 		vibr_Enable_HW();
 		g_mt_vib->ldo_state = 1;
+
+#ifdef SENSOR_VIB_INTERLOCKING
+		vibrator_send_uevent(1);
+#endif
 	}
 	return 0;
 }
@@ -59,6 +75,10 @@ static int vibr_Disable(void)
 	if (g_mt_vib->ldo_state) {
 		vibr_Disable_HW();
 		g_mt_vib->ldo_state = 0;
+
+#ifdef SENSOR_VIB_INTERLOCKING
+		vibrator_send_uevent(0);
+#endif
 	}
 	return 0;
 }
@@ -78,6 +98,8 @@ static void vibrator_enable(unsigned int dur, unsigned int activate)
 	unsigned long flags;
 	struct vibrator_hw *hw = mt_get_cust_vibrator_hw();
 
+	pr_info(VIB_TAG "%s: dur=%u, activate=%u\n", __func__, dur, activate);
+
 	spin_lock_irqsave(&g_mt_vib->vibr_lock, flags);
 	hrtimer_cancel(&g_mt_vib->vibr_timer);
 	pr_debug(VIB_TAG "cancel hrtimer, cust:%dms, value:%u, shutdown:%d\n",
@@ -93,7 +115,7 @@ static void vibrator_enable(unsigned int dur, unsigned int activate)
 #endif
 			dur = hw->vib_timer;
 
-		dur = (dur > 15000 ? 15000 : dur);
+		dur = (dur > VIB_TIMEOUT_MS ? VIB_TIMEOUT_MS : dur);
 		atomic_set(&g_mt_vib->vibr_state, 1);
 		hrtimer_start(&g_mt_vib->vibr_timer,
 			      ktime_set(dur / 1000, (dur % 1000) * 1000000),
@@ -229,6 +251,31 @@ static struct led_classdev led_vibr = {
 	.name		= "vibrator",
 	.groups		= vibr_group,
 };
+
+#ifdef SENSOR_VIB_INTERLOCKING
+static void vibrator_send_uevent(int on)
+{
+	char event_string[20];
+	char *envp[] = { event_string, NULL };
+	struct device *dev = led_vibr.dev;
+
+	if (!dev) {
+		pr_err(VIB_TAG "dev NULL\n");
+		return;
+	}
+
+	if (on)
+		sprintf(event_string, "KC_VIB=ON");
+	else
+		sprintf(event_string, "KC_VIB=OFF");
+
+	kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, envp);
+
+	pr_debug("%s: dev = 0x%lx, &dev->kobj = 0x%lx\n", __func__,
+				(unsigned long)dev, (unsigned long)&dev->kobj);
+	return;
+}
+#endif
 
 static int vib_probe(struct platform_device *pdev)
 {

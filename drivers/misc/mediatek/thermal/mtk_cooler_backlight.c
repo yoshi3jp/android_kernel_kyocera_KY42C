@@ -22,13 +22,14 @@
 #include <linux/printk.h>
 #include <linux/types.h>
 #include <linux/kobject.h>
+#include <linux/kc_leds_drv.h>
 
 #include "mt-plat/mtk_thermal_monitor.h"
 
 #define mtk_cooler_backlight_dprintk(fmt, args...)	\
 	pr_notice("thermal/cooler/backlight " fmt, ##args)
 
-#define BACKLIGHT_COOLER_NR 3
+#define BACKLIGHT_COOLER_NR 2
 
 static struct thermal_cooling_device
 *cl_backlight_dev[BACKLIGHT_COOLER_NR] = { 0 };
@@ -49,19 +50,16 @@ static void mtk_cl_backlight_set_max_brightness_limit(void)
 
 		switch (g_backlight_level) {
 		case 0:
-			setMaxbrightness(255, 0);	/* 100% */
+			kc_leds_set_maxbrightness(251, 0);	/* 100% */
 			break;
 		case 1:
-			setMaxbrightness(178, 1);	/* 70% */
+			kc_leds_set_maxbrightness(166, 1);	/* 70% */
 			break;
 		case 2:
-			setMaxbrightness(102, 1);	/* 40% */
-			break;
-		case 3:
-			setMaxbrightness(25, 1);	/* 10% */
+			kc_leds_set_maxbrightness(85, 1);	/* 10% */
 			break;
 		default:
-			setMaxbrightness(255, 0);
+			kc_leds_set_maxbrightness(251, 0);
 			break;
 		}
 	}

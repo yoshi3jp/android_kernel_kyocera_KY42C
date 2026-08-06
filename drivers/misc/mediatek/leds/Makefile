@@ -11,6 +11,10 @@
 # GNU General Public License for more details.
 #
 
+# This software is contributed or developed by KYOCERA Corporation.
+# (C) 2022 KYOCERA Corporation
+#
+
 ifeq (y, $(filter y, $(CONFIG_MACH_MT6765) $(CONFIG_MACH_MT6761)))
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/leds/mt6765
 else
@@ -27,3 +31,17 @@ else
 obj-y += $(subst ",,$(CONFIG_MTK_PLATFORM))/
 endif
 
+# KCLIGHT_CUST +
+# obj-y		+= kc_leds_drv.o
+# obj-y		+= kc_leds_gpio_drv.o
+obj-y		+= kyocera/leds-lp5569kc.o
+obj-y		+= kyocera/leds-lv5216kc.o
+obj-y		+= kyocera/kc_leds_api.o
+obj-y += kyocera/kc_wled.o
+obj-y += kyocera/kc_wled_cat4004b.o
+obj-y += kyocera/kc_light_ktd2687.o
+obj-y += kyocera/kc_leds_key_gpio.o
+obj-y += kyocera/kc_leds_drv.o
+obj-y += kyocera/kc_slcdbl.o
+obj-y += kyocera/camera_light.o
+# KCLIGHT_CUST -

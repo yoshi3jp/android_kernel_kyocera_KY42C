@@ -10,6 +10,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2022 KYOCERA Corporation
+ */
 
 #include <linux/module.h>
 #include <linux/init.h>
@@ -282,6 +286,17 @@ static const struct flashlight_properties mt6370_bledfl_props = {
 	.strobe_timeout = 208, /* default strobe timeout 208mS */
 	.alias_name = "mt6370_pmu_bled",
 };
+
+static struct mt6370_pmu_bled_data *gbled_data;
+
+void mt6370_pmu_bled_en_set(bool flag)
+{
+    mt6370_pmu_reg_update_bits(gbled_data->chip, MT6370_PMU_REG_BLEN,
+    MT6370_BLED_EN,
+    flag == true ?
+    MT6370_BLED_EN : ~MT6370_BLED_EN);
+}
+
 
 static void mt6370_pmu_bled_bright_set(struct led_classdev *led_cdev,
 	enum led_brightness brightness)

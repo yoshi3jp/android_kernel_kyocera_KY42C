@@ -10,6 +10,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2022 KYOCERA Corporation
+ */
 
 #include <linux/module.h>
 #include <linux/init.h>
@@ -18,6 +22,10 @@
 #include <linux/of.h>
 #include <linux/leds.h>
 #include <linux/workqueue.h>
+
+// KC_LIGHT_CUST +
+#include <linux/kc_leds_drv.h>
+// KC_LIGHT_CUST -
 
 #include "inc/mt6370_pmu.h"
 #include "inc/mt6370_pmu_rgbled.h"
@@ -1007,18 +1015,28 @@ static struct led_trigger mt6370_pmu_led_trigger2[] = {
 	},
 };
 /* 6372 end */
-static void mt6370_pmu_led_bright_set(struct led_classdev *led_cdev,
+// KC_LIGHT_CUST +
+void mt6370_pmu_led_bright_set(struct led_classdev *led_cdev,
 	enum led_brightness bright)
+// KC_LIGHT_CUST -
 {
 	int led_index = mt6370_pmu_led_get_index(led_cdev);
 	uint8_t reg_addr = 0, reg_mask = 0x7, reg_shift = 0, en_mask = 0;
-	bool need_enable_timer = true;
+// KC_LIGHT_CUST +
+	bool need_enable_timer = false;
 	int ret = 0;
+	int bright_reg = bright;
+// KC_LIGHT_CUST -
 
 	switch (led_index) {
 	case MT6370_PMU_LED1:
 		reg_addr = MT6370_PMU_REG_RGB1ISINK;
 		en_mask = 0x80;
+// KC_LIGHT_CUST +
+		if (bright != 0) {
+			bright_reg = 1;
+		}
+// KC_LIGHT_CUST -
 		break;
 	case MT6370_PMU_LED2:
 		reg_addr = MT6370_PMU_REG_RGB2ISINK;
@@ -1033,13 +1051,20 @@ static void mt6370_pmu_led_bright_set(struct led_classdev *led_cdev,
 		reg_mask = 0x3;
 		en_mask = 0x10;
 		need_enable_timer = false;
+// KC_LIGHT_CUST +
+		if (bright != 0) {
+			bright_reg = 0;
+		}
+// KC_LIGHT_CUST -
 		break;
 	default:
 		dev_err(led_cdev->dev, "invalid mt led index\n");
 		return;
 	}
+// KC_LIGHT_CUST +
 	ret = mt6370_pmu_led_update_bits(led_cdev, reg_addr, reg_mask,
 					 (bright & reg_mask) << reg_shift);
+// KC_LIGHT_CUST -
 	if (ret < 0) {
 		dev_err(led_cdev->dev, "update brightness fail\n");
 		return;
@@ -1102,8 +1127,10 @@ static enum led_brightness mt6370_pmu_led_bright_get(
 static inline int mt6370_pmu_led_config_pwm(struct led_classdev *led_cdev,
 	unsigned long *delay_on, unsigned long *delay_off)
 {
-	const ulong dim_time[] = { 10000, 5000, 2000, 1000, 500, 200, 5, 1};
+// KC_LIGHT_CUST +
+	const ulong dim_time[] = { 10000, 7500, 3500, 1000, 500, 200, 5, 1};
 	const unsigned long ton = *delay_on, toff = *delay_off;
+// KC_LIGHT_CUST -
 	int led_index = mt6370_pmu_led_get_index(led_cdev);
 	int reg_addr, reg_mask, reg_shift;
 	int i, j, ret = 0;
@@ -1178,16 +1205,20 @@ static inline int mt6370_pmu_led_config_pwm(struct led_classdev *led_cdev,
 }
 
 static int mt6370_pmu_led_change_mode(struct led_classdev *led_cdev, int mode);
-static int mt6370_pmu_led_blink_set(struct led_classdev *led_cdev,
+// KC_LIGHT_CUST +
+int mt6370_pmu_led_blink_set(struct led_classdev *led_cdev,
 	unsigned long *delay_on, unsigned long *delay_off)
+// KC_LIGHT_CUST -
 {
 	int mode_sel = MT6370_PMU_LED_PWMMODE;
 	int ret = 0;
 
 	if (!*delay_on && !*delay_off)
 		*delay_on = *delay_off = 500;
+
 	if (!*delay_off)
 		mode_sel = MT6370_PMU_LED_REGMODE;
+
 	if (mode_sel == MT6370_PMU_LED_PWMMODE) {
 		/* workaround, fix cc to pwm */
 		ret = mt6370_pmu_led_change_mode(led_cdev,
@@ -1266,6 +1297,7 @@ static int mt6370_pmu_led_change_mode(struct led_classdev *led_cdev, int mode)
 		ret = mt6370_pmu_led_update_bits(led_cdev,
 						 MT6370_PMU_REG_RGBCHRINDDIM,
 						 0x80, 0x80);
+
 		if (ret < 0)
 			return ret;
 		reg_addr = MT6370_PMU_REG_RGBCHRINDDIM;
@@ -2095,18 +2127,43 @@ static void mt6370_led_enable_dwork_func(struct work_struct *work)
 static inline int mt6370_pmu_rgbled_init_register(
 	struct mt6370_pmu_rgbled_data *rgbled_data)
 {
+// KC_LIGHT_CUST +
+#if 0
 	const u8 *init_data = rgbled_init_data;
 	int init_data_size = ARRAY_SIZE(rgbled_init_data);
 	u8 chip_vid = rgbled_data->chip->chip_vid;
+#endif
+	int ret = 0;
+	int i;
 
+	for(i = 0;i<ARRAY_SIZE(rgbled_init_data);i++)
+	{
+		if(i == MT6370_PMU_REG_RGBEN - MT6370_PMU_REG_RGB1DIM)
+			mt6370_pmu_reg_update_bits(rgbled_data->chip , MT6370_PMU_REG_RGB1DIM + i , 0x0F , rgbled_init_data[i]);
+
+		else if(i == MT6370_PMU_REG_RGBCHRINDDIM - MT6370_PMU_REG_RGB1DIM)
+			mt6370_pmu_reg_update_bits(rgbled_data->chip , MT6370_PMU_REG_RGB1DIM + i , 0x7F , rgbled_init_data[i]);
+
+		else
+			mt6370_pmu_reg_write(rgbled_data->chip , MT6370_PMU_REG_RGB1DIM + i , rgbled_init_data[i]);
+
+		pr_err("[Leds]%s i = %d\n",__func__,i);
+	}
+
+	return ret;
+
+#if 0
 	if (chip_vid == MT6372_VENDOR_ID || chip_vid == MT6372C_VENDOR_ID) {
 		init_data = rgbled_init_data2;
 		init_data_size = ARRAY_SIZE(rgbled_init_data2);
 	}
+
 	return mt6370_pmu_reg_block_write(rgbled_data->chip,
 					  MT6370_PMU_REG_RGB1DIM,
 					  init_data_size,
 					  init_data);
+#endif
+// KC_LIGHT_CUST -
 }
 
 static inline int mt6370_pmu_rgbled_parse_initdata(
@@ -2195,9 +2252,13 @@ static int mt6370_pmu_rgbled_probe(struct platform_device *pdev)
 	if (ret < 0)
 		goto out_init_data;
 
+// KC_LIGHT_CUST +
+#if 0
 	ret = mt6370_pmu_rgbled_init_register(rgbled_data);
 	if (ret < 0)
 		goto out_init_reg;
+#endif
+// KC_LIGHT_CUST -
 
 	for (i = 0; i < ARRAY_SIZE(mt6370_pmu_led_trigger) && !new; i++) {
 		ret = led_trigger_register(&mt6370_pmu_led_trigger[i]);
@@ -2240,6 +2301,12 @@ static int mt6370_pmu_rgbled_probe(struct platform_device *pdev)
 	}
 	mt6370_pmu_rgbled_irq_register(pdev);
 	dev_info(&pdev->dev, "%s successfully\n", __func__);
+
+// KC_LIGHT_CUST +
+    for(i = 0 ; i < MT6370_PMU_MAXLED ; i++)
+            kc_rgb_led_info_get( i , &mt6370_led_classdev[i].led_dev);
+// KC_LIGHT_CUST -
+
 	return 0;
 out_led_register:
 	while (!new && --i >= 0)
@@ -2255,7 +2322,9 @@ out_led_trigger:
 		led_trigger_register(&mt6370_pmu_led_trigger[i]);
 	while (new && --i >= 0)
 		led_trigger_register(&mt6370_pmu_led_trigger2[i]);
-out_init_reg:
+// KC_LIGHT_CUST +
+//out_init_reg:
+// KC_LIGHT_CUST -
 out_init_data:
 out_pdata:
 	devm_kfree(&pdev->dev, rgbled_data);

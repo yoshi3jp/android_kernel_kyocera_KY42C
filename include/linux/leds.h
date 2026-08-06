@@ -9,6 +9,10 @@
  * published by the Free Software Foundation.
  *
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2022 KYOCERA Corporation
+ */
 #ifndef __LINUX_LEDS_H_INCLUDED
 #define __LINUX_LEDS_H_INCLUDED
 
@@ -35,6 +39,10 @@ struct led_classdev {
 	const char		*name;
 	enum led_brightness	 brightness;
 	enum led_brightness	 max_brightness;
+// KC_LIGHT_CUST +
+	enum led_brightness	 usr_brightness_req;
+	enum led_brightness	 kc_max_brightness;
+// KC_LIGHT_CUST -
 	int			 flags;
 
 	/* Lower 16 bits reflect status */
@@ -52,6 +60,9 @@ struct led_classdev {
 #define LED_DEV_CAP_FLASH	(1 << 24)
 #define LED_HW_PLUGGABLE	(1 << 25)
 #define LED_PANIC_INDICATOR	(1 << 26)
+// KC_LIGHT_CUST +
+#define LED_KEEP_TRIGGER	(1 << 27)
+// KC_LIGHT_CUST -
 
 	/* Set LED brightness level
 	 * Must not sleep. Use brightness_set_blocking for drivers
