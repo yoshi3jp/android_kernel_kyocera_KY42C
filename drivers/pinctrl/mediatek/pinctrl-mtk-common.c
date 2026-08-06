@@ -618,6 +618,14 @@ static int mtk_pconf_set_pull_select(struct mtk_pinctrl *pctl,
 	return 0;
 }
 
+int KC_mtk_pconf_set_pull_select(unsigned int pin, bool enable, bool isup, unsigned int arg)
+{
+  int ret;
+  
+  ret = mtk_pconf_set_pull_select(pctl, pin, enable, isup, arg);
+  return ret;
+}
+
 static int mtk_pconf_parse_conf(struct pinctrl_dev *pctldev,
 		unsigned int pin, enum pin_config_param param,
 		enum pin_config_param arg)
@@ -1538,6 +1546,16 @@ static int mtk_pullsel_get(struct gpio_chip *chip, unsigned int offset)
 	bit =  BIT(offset & 0xf);
 	regmap_read(mtk_get_regmap(pctl, offset), reg_addr, &pull_sel);
 	return !!(pull_sel & bit);
+}
+
+void KC_mtk_pullen_pullsel_get(unsigned int offset, int *pullen, int *pullsel)
+{
+  struct gpio_chip *chip;
+  
+  chip = pctl->chip;
+  
+  *pullen = mtk_pullen_get(chip, offset);
+  *pullsel = mtk_pullsel_get(chip, offset);
 }
 
 int mtk_spec_get_ies_smt_range(struct regmap *regmap,

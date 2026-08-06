@@ -1,4 +1,9 @@
 #
+# This software is contributed or developed by KYOCERA Corporation.
+# (C) 2022 KYOCERA Corporation
+#
+
+#
 # Copyright (C) 2017 MediaTek Inc.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -162,6 +167,9 @@ obj-y += perf/
 
 #io boost
 obj-y += io_boost/
+
+#kyocera
+obj-$(CONFIG_MTK_PWM_BUZZER)	+= buzzer/
 
 ifeq ($(CONFIG_MTK_HAVE_EXTERNAL_VENDOR_PATH),y)
 obj-y += ../../../../$(subst $\",,$(CONFIG_MTK_EXTERNAL_VENDOR_PATH))

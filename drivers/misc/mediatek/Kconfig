@@ -1,3 +1,7 @@
+#
+# This software is contributed or developed by KYOCERA Corporation.
+# (C) 2022 KYOCERA Corporation
+#
 
 menuconfig MEDIATEK_SOLUTION
 	bool "MediaTek Properitary Configuration"
@@ -211,6 +215,7 @@ source "drivers/misc/mediatek/pmic/Kconfig"
 source "drivers/misc/mediatek/pmic_wrap/Kconfig"
 source "drivers/misc/mediatek/power/Kconfig"
 source "drivers/misc/mediatek/thermal/Kconfig"
+source "drivers/misc/mediatek/thermal/common/thermal_zones/Kconfig"
 
 config MTK_PSCI
 	bool "MediaTek PSCI boot method"
@@ -417,6 +422,9 @@ source "drivers/misc/mediatek/usb2jtag/Kconfig"
 
 source "drivers/misc/mediatek/devmpu/Kconfig"
 source "drivers/misc/mediatek/xhci/Kconfig"
+
+#kyocera
+source "drivers/misc/mediatek/buzzer/Kconfig"
 
 endmenu # Peripheral
 

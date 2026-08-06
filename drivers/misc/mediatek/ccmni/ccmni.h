@@ -41,7 +41,7 @@
  */
 /* #define ENABLE_NAPI_GRO */
 #ifdef CONFIG_MTK_ECCCI_C2K
-#define ENABLE_WQ_GRO
+// #define ENABLE_WQ_GRO
 #endif
 
 #define  CCMNI_MTU              1500

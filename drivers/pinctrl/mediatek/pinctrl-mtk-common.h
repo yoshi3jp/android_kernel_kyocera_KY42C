@@ -427,6 +427,9 @@ int mtk_pconf_spec_set_ies_smt_range(struct regmap *regmap,
 		const struct mtk_pin_ies_smt_set *ies_smt_infos,
 		unsigned int info_num, unsigned int pin,
 		unsigned char align, int value);
+   
+void KC_mtk_pullen_pullsel_get(unsigned int offset, int *pullen, int *pullsel);
+int KC_mtk_pconf_set_pull_select(unsigned int pin, bool enable, bool isup, unsigned int arg);
 
 #if defined(CONFIG_PINCTRL_MTK_NO_UPSTREAM)
 int mtk_spec_pull_get_samereg(struct regmap *regmap,

@@ -40,6 +40,7 @@
 #include <mt-plat/mtk_lpae.h>
 #include <linux/seq_file.h>
 #include <linux/pm_runtime.h>
+#include <linux/mmc/mmc.h>
 
 #include "mtk_sd.h"
 #include <mmc/core/core.h>
@@ -1749,6 +1750,12 @@ static unsigned int msdc_command_start(struct msdc_host   *host,
 
 	sdc_send_cmd(rawcmd, cmd->arg);
 
+	if (( host->mmc->index == 0 && SDC_SDCARD_LOG(SDC_SDCARD_LOG_EMMC)) ||
+		( host->mmc->index == 0 && cmd->opcode == MMC_GO_IDLE_STATE ) ||
+		( host->mmc->index == 1 && SDC_SDCARD_LOG(SDC_SDCARD_LOG_SD) ) )
+	{
+		pr_notice( "%s: CMD%d: arg = %08x clock:%d\n", mmc_hostname(host->mmc), cmd->opcode, cmd->arg, host->hclk);
+	}
 	return 0;
 
 err:
@@ -1859,9 +1866,25 @@ skip_cmd_resp_polling:
 			*rsp++ = MSDC_READ32(SDC_RESP2);
 			*rsp++ = MSDC_READ32(SDC_RESP1);
 			*rsp++ = MSDC_READ32(SDC_RESP0);
+
+			if (( host->mmc->index == 0 && SDC_SDCARD_LOG(SDC_SDCARD_LOG_EMMC)) ||
+				( host->mmc->index == 1 && SDC_SDCARD_LOG(SDC_SDCARD_LOG_SD) ))
+			{
+				pr_notice("%s: resp[0]=%08X\n", mmc_hostname(host->mmc), (u32)MSDC_READ32(SDC_RESP0));
+				pr_notice("%s: resp[1]=%08X\n", mmc_hostname(host->mmc), (u32)MSDC_READ32(SDC_RESP1));
+				pr_notice("%s: resp[2]=%08X\n", mmc_hostname(host->mmc), (u32)MSDC_READ32(SDC_RESP2));
+				pr_notice("%s: resp[3]=%08X\n", mmc_hostname(host->mmc), (u32)MSDC_READ32(SDC_RESP3));
+			}
+
 			break;
 		default: /* Response types 1, 3, 4, 5, 6, 7(1b) */
 			*rsp = MSDC_READ32(SDC_RESP0);
+
+			if (( host->mmc->index == 0 && SDC_SDCARD_LOG(SDC_SDCARD_LOG_EMMC)) ||
+				( host->mmc->index == 1 && SDC_SDCARD_LOG(SDC_SDCARD_LOG_SD) ))
+			{
+				pr_notice("%s: resp[0]=%08X\n", mmc_hostname(host->mmc), (u32)MSDC_READ32(SDC_RESP3));
+			}
 			if ((cmd->opcode == 13) || (cmd->opcode == 25)) {
 				/* Only print msg on this error */
 				if (*rsp & R1_WP_VIOLATION) {

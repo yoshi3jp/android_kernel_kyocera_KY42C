@@ -997,6 +997,11 @@ s32 pwm_set_easy_config(struct pwm_easy_config *conf)
 		break;
 
 	case PWM_CLK_OLD_MODE_BLOCK:
+#ifdef PWM_HW_V_1_0
+		mt_pwm_clk_sel_hal(conf->pwm_no, CLK_26M);
+#else
+		mt_pwm_26M_clk_enable_hal(1);
+#endif
 		mt_set_pwm_con_oldmode(conf->pwm_no, OLDMODE_ENABLE);
 		mt_set_pwm_clk(conf->pwm_no, CLK_BLOCK, conf->clk_div);
 		break;

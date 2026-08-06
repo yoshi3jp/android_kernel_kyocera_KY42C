@@ -79,7 +79,6 @@
 #define MTK_MSDC_USE_CMD23
 #if !defined(CONFIG_PWR_LOSS_MTK_TEST) && defined(MTK_MSDC_USE_CMD23) \
 	|| defined(CONFIG_MTK_EMMC_HW_CQ)
-#define MTK_MSDC_USE_CACHE
 #endif
 
 #ifdef MTK_MSDC_USE_CMD23
@@ -626,7 +625,7 @@ static inline unsigned int uffs(unsigned int x)
 #define POLLING_PINS            (HZ*20 / 1000)	/* 20ms */
 
 /* data timeout for worker */
-#define DATA_TIMEOUT_MS         (1000  * 30)    /* 30s */
+#define DATA_TIMEOUT_MS         (1000  * 2)    /* 30s */
 extern struct msdc_host *mtk_msdc_host[];
 extern unsigned int msdc_latest_transfer_mode[HOST_MAX_NUM];
 extern u32 latest_int_status[];

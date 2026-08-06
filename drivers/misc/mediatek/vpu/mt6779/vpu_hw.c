@@ -53,6 +53,8 @@
 #include "vpu_dbg.h"
 #include "vpu_qos.h"
 #include "vpu_dump.h"
+#include <linux/arm-smccc.h>
+#include <mt-plat/mtk_secure_api.h>
 
 #define ENABLE_PMQOS
 #ifdef ENABLE_PMQOS
@@ -1137,7 +1139,7 @@ if (vvpu_index == 0xFF) {
 		LOG_ERR("wrong vvpu opp(%d), max(%d)",
 				vvpu_index, opps.count - 1);
 
-	} else if ((vvpu_index < opps.vvpu.index) ||
+	} else if ((vvpu_index <= opps.vvpu.index) ||
 			((vvpu_index > opps.vvpu.index) &&
 				(!opp_keep_flag)) ||
 				(mdla_get_opp() < opps.dsp.index) ||
@@ -1263,7 +1265,7 @@ if (vvpu_index == 0xFF) {
 	mutex_unlock(&opp_mutex);
 out:
 	LOG_INF("%s(%d)(%d/%d_%d)(%d/%d)(%d.%d.%d.%d)(%d/%d)(%d/%d/%d/%d)%d\n",
-		"opp_check",
+		"opp_check_v1",
 		core,
 		is_power_debug_lock,
 		vvpu_index,
@@ -4812,9 +4814,15 @@ int vpu_debug_func_core_state(int core, enum VpuCoreState state)
 	return 0;
 }
 
+enum MTK_APUSYS_KERNEL_OP {
+	MTK_VPU_SMC_INIT = 0,
+	MTK_APUSYS_KERNEL_OP_NUM
+};
+
 int vpu_boot_up(int core, bool secure)
 {
 	int ret = 0;
+	struct arm_smccc_res res;
 
 	/*secure flag is for sdsp force shut down*/
 
@@ -4854,6 +4862,10 @@ int vpu_boot_up(int core, bool secure)
 	}
 
 	if (!secure) {
+		arm_smccc_smc(MTK_SIP_APUSYS_CONTROL,
+			MTK_VPU_SMC_INIT,
+			0, 0, 0, 0, 0, 0, &res);
+
 		ret = vpu_hw_boot_sequence(core);
 		if (ret) {
 			LOG_ERR("[vpu_%d]fail to do boot sequence\n", core);
