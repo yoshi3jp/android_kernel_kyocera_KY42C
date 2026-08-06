@@ -10,12 +10,25 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  */
+/* 
+ * This software is contributed or developed by KYOCERA Corporation. 
+ * (C) 2022 KYOCERA Corporation 
+*/
 
 #ifndef __MT65XX_LCM_LIST_H__
 #define __MT65XX_LCM_LIST_H__
 
 #include <lcm_drv.h>
+// KCDISP_CUST +
+#include <uapi/linux/kcdisp_uapi.h>
+// KCDISP_CUST -
 
+#ifdef KCDISP_CUST
+extern struct LCM_DRIVER kc_ili9806e_fwvga_dsi_vdo_lcm_drv;
+extern struct LCM_DRIVER kc_st7701si_fwvga_dsi_vdo_lcm_drv;
+extern struct LCM_DRIVER kc_st7701si_fwvga_dsi_vdo_5a_lcm_drv;
+extern struct LCM_DRIVER kc_auo_a026qtn01_0_qvga_dsi_vdo_lcm_drv;
+#endif /* KCDISP_CUST*/
 extern struct LCM_DRIVER otm1282a_hd720_dsi_vdo_60hz_lcm_drv;
 extern struct LCM_DRIVER otm1282a_hd720_dsi_vdo_lcm_drv;
 extern struct LCM_DRIVER nt35595_fhd_dsi_cmd_truly_8163_lcm_drv;

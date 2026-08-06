@@ -10,6 +10,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2022 KYOCERA Corporation
+*/
 
 #include <linux/regulator/consumer.h>
 #include <linux/string.h>
@@ -19,6 +23,15 @@
 static struct regulator *disp_bias_pos;
 static struct regulator *disp_bias_neg;
 static int regulator_inited;
+
+// KCDISP_CUST +
+#include <uapi/linux/kcdisp_uapi.h>
+// KCDISP_CUST -
+
+#ifdef KCDISP_CUST
+#define PANEL_NOT_FOUND		-1
+extern int kdisp_lcm_get_panel_detect(void);
+#endif /* KCDISP_CUST */
 
 int display_bias_regulator_init(void)
 {
@@ -52,6 +65,13 @@ int display_bias_enable(void)
 {
 	int ret = 0;
 	int retval = 0;
+
+#ifdef KCDISP_CUST
+	if (kdisp_lcm_get_panel_detect() == PANEL_NOT_FOUND) {
+		pr_err("[KCDISP]%s skip for panel not detect\n",__func__);
+		return 0;
+	}
+#endif /* KCDISP_CUST */
 
 	display_bias_regulator_init();
 
@@ -99,6 +119,13 @@ int display_bias_disable(void)
 {
 	int ret = 0;
 	int retval = 0;
+
+#ifdef KCDISP_CUST
+	if (kdisp_lcm_get_panel_detect() == PANEL_NOT_FOUND) {
+		pr_err("[KCDISP]%s skip for panel not detect\n",__func__);
+		return 0;
+	}
+#endif /* KCDISP_CUST */
 
 	display_bias_regulator_init();
 

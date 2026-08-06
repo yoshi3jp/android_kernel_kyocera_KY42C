@@ -580,14 +580,12 @@ void LinuxInitPhysmem(void)
 {
 	g_psLinuxPageArray = kmem_cache_create("pvr-pa", sizeof(PMR_OSPAGEARRAY_DATA), 0, 0, NULL);
 
-	_PagePoolLock();
 	g_psLinuxPagePoolCache = kmem_cache_create("pvr-pp", sizeof(LinuxPagePoolEntry), 0, 0, NULL);
 	if (g_psLinuxPagePoolCache)
 	{
 		/* Only create the shrinker if we created the cache OK */
 		register_shrinker(&g_sShrinker);
 	}
-	_PagePoolUnlock();
 
 	OSAtomicWrite(&g_iPoolCleanTasks, 0);
 }
@@ -1685,7 +1683,11 @@ _AllocOSPage_CMA(PMR_OSPAGEARRAY_DATA *psPageArrayData,
 			   normal page allocation though we expect dma_alloc_coherent()
 			   already attempts this internally also before failing but
 			   nonetheless it does no harm to retry the allocation ourselves */
+#if defined(CONFIG_MACH_MT6761)
+			page = pfnAllocPage(gfp_flags, ui32AllocOrder);
+#else
 			page = alloc_pages(gfp_flags, ui32AllocOrder);
+#endif
 			if (page)
 			{
 				/* Taint bus_addr as alloc_page, needed when freeing;
@@ -1811,7 +1813,11 @@ _AllocOSPage(PMR_OSPAGEARRAY_DATA *psPageArrayData,
 
 	/* Allocate the page */
 	DisableOOMKiller();
+#if defined(CONFIG_MACH_MT6761)
+	psPage = pfnAllocPage(gfp_flags, uiAllocOrder);
+#else
 	psPage = alloc_pages(gfp_flags, uiAllocOrder);
+#endif
 	EnableOOMKiller();
 
 	if (psPage == NULL)
@@ -2308,7 +2314,11 @@ _AllocOSPages_Sparse(PMR_OSPAGEARRAY_DATA *psPageArrayData,
 			else
 			{
 				DisableOOMKiller();
+#if defined(CONFIG_MACH_MT6761)
+				ppsPageArray[puiAllocIndices[i]] = pfnAllocPage(ui32GfpFlags, uiOrder);
+#else
 				ppsPageArray[puiAllocIndices[i]] = alloc_pages(ui32GfpFlags, uiOrder);
+#endif
 				EnableOOMKiller();
 			}
 
@@ -2704,6 +2714,7 @@ _FreeOSPages_Sparse(PMR_OSPAGEARRAY_DATA *psPageArrayData,
 				uiTempIdx++;
 			}
 		}
+		uiTempIdx <<= uiOrder;
 	}
 	else
 	{
@@ -2739,7 +2750,7 @@ _FreeOSPages_Sparse(PMR_OSPAGEARRAY_DATA *psPageArrayData,
 		bSuccess = _PutPagesToPoolLocked(psPageArrayData->ui32CPUCacheFlags,
 										 ppsTempPageArray,
 										 psPageArrayData->bUnpinned,
-										 uiOrder,
+										 0,
 										 uiTempIdx);
 		if (bSuccess)
 		{
@@ -2763,7 +2774,7 @@ _FreeOSPages_Sparse(PMR_OSPAGEARRAY_DATA *psPageArrayData,
 		/* Free the pages */
 		for (i = 0; i < uiTempIdx; i++)
 		{
-			__free_pages(ppsTempPageArray[i], uiOrder);
+			__free_pages(ppsTempPageArray[i], 0);
 		}
 
 		/* Free the temp page array here if it did not move to the pool */
@@ -2772,7 +2783,7 @@ _FreeOSPages_Sparse(PMR_OSPAGEARRAY_DATA *psPageArrayData,
 
 exit_ok:
 	/* Update metadata */
-	psPageArrayData->iNumOSPagesAllocated -= (uiTempIdx << uiOrder);
+	psPageArrayData->iNumOSPagesAllocated -= uiTempIdx;
 	PVR_ASSERT(0 <= psPageArrayData->iNumOSPagesAllocated);
 	return PVRSRV_OK;
 }
@@ -3019,7 +3030,9 @@ PMRSysPhysAddrOSMem(PMR_IMPL_PRIVDATA pvPriv,
 			uiPageIndex = puiOffset[uiIdx] >> psOSPageArrayData->uiLog2AllocPageSize;
 			uiInPageOffset = puiOffset[uiIdx] - ((IMG_DEVMEM_OFFSET_T)uiPageIndex << psOSPageArrayData->uiLog2AllocPageSize);
 
-			PVR_ASSERT(uiPageIndex < psOSPageArrayData->uiTotalNumOSPages);
+			PVR_LOGR_IF_FALSE(uiPageIndex < psOSPageArrayData->uiTotalNumOSPages,
+			                  "puiOffset out of range", PVRSRV_ERROR_OUT_OF_RANGE);
+
 			PVR_ASSERT(uiInPageOffset < uiPageSize);
 
 			psDevPAddr[uiIdx].uiAddr = page_to_phys(psOSPageArrayData->pagearray[uiPageIndex]);

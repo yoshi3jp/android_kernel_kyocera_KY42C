@@ -50,7 +50,10 @@ EXPORT_SYMBOL(registered_fb);
 int num_registered_fb __read_mostly;
 EXPORT_SYMBOL(num_registered_fb);
 
-static struct fb_info *get_fb_info(unsigned int idx)
+// KCDISP_CUST +
+//static struct fb_info *get_fb_info(unsigned int idx)
+struct fb_info *get_fb_info(unsigned int idx)
+// KCDISP_CUST -
 {
 	struct fb_info *fb_info;
 
@@ -1071,6 +1074,32 @@ fb_blank(struct fb_info *info, int blank)
 	event.info = info;
 	event.data = &blank;
 
+#ifdef KCDISP_CUST
+	pr_err("[KCDISP] %s: kdisp_disp_type=%d\n", __func__, info->kdisp_disp_type);
+	if (info->kdisp_disp_type != KDISP_DISP_TYPE_SUBDISP) {
+		early_ret = fb_notifier_call_chain(FB_EARLY_EVENT_BLANK, &event);
+	}
+
+	if (info->fbops->fb_blank)
+ 		ret = info->fbops->fb_blank(blank, info);
+
+	if (!ret) {
+		if (info->kdisp_disp_type != KDISP_DISP_TYPE_SUBDISP) {
+			fb_notifier_call_chain(FB_EVENT_BLANK, &event);
+		}
+	}
+	else {
+		/*
+		 * if fb_blank is failed then revert effects of
+		 * the early blank event.
+		 */
+		if (!early_ret) {
+			if (info->kdisp_disp_type != KDISP_DISP_TYPE_SUBDISP) {
+				fb_notifier_call_chain(FB_R_EARLY_EVENT_BLANK, &event);
+			}
+		}
+	}
+#else /* KCDISP_CUST */
 	early_ret = fb_notifier_call_chain(FB_EARLY_EVENT_BLANK, &event);
 
 	if (info->fbops->fb_blank)
@@ -1086,6 +1115,7 @@ fb_blank(struct fb_info *info, int blank)
 		if (!early_ret)
 			fb_notifier_call_chain(FB_R_EARLY_EVENT_BLANK, &event);
 	}
+#endif /* KCDISP_CUST */
 
  	return ret;
 }

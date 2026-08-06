@@ -10,6 +10,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2022 KYOCERA Corporation
+*/
 
 #ifndef __LCM_DRV_H__
 #define __LCM_DRV_H__
@@ -17,6 +21,11 @@
 #include <linux/device.h>
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
+
+// KCDISP_CUST +
+#include "kdisp_lcm_drv.h"
+#include <uapi/linux/kcdisp_uapi.h>
+// KCDISP_CUST -
 
 #ifndef ARY_SIZE
 #define ARY_SIZE(x) (sizeof((x)) / sizeof((x[0])))
@@ -947,6 +956,9 @@ struct LCM_DRIVER {
 	void (*aod)(int enter);
 	void (*set_aod_area_cmdq)(void *handle, unsigned char *area);
 	int (*get_doze_delay)(void);
+#ifdef KCDISP_CUST
+	struct KDISP_LCM_DRIVER		kdisp_lcm_drv;
+#endif /* KCDISP_CUST */
 };
 
 /* LCM Driver Functions */

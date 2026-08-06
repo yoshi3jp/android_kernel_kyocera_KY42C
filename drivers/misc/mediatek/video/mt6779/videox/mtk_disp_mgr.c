@@ -100,6 +100,7 @@ static int has_memory_session;
 /* @g_session: SESSION_TYPE | DEVICE_ID */
 static unsigned int g_session[MAX_SESSION_COUNT];
 static DEFINE_MUTEX(disp_session_lock);
+static DEFINE_MUTEX(disp_layer_lock);
 
 static dev_t mtk_disp_mgr_devno;
 static struct cdev *mtk_disp_mgr_cdev;
@@ -1025,16 +1026,16 @@ long __frame_config(unsigned long arg)
 		goto error1;
 	}
 
+	if (disp_validate_ioctl_params(cfg)) {
+		ret = -EINVAL;
+		goto error1;
+	}
+
 	cfg->setter = SESSION_USER_HWC;
 
 	input_config_preprocess(cfg);
 	if (cfg->output_en)
 		output_config_preprocess(cfg);
-
-	if (disp_validate_ioctl_params(cfg)) {
-		ret = -EINVAL;
-		goto error2;
-	}
 
 	switch (DISP_SESSION_TYPE(cfg->session_id)) {
 	case DISP_SESSION_PRIMARY:
@@ -1052,7 +1053,6 @@ long __frame_config(unsigned long arg)
 		break;
 	}
 
-error2:
 	disp_input_free_dirty_roi(cfg);
 error1:
 	kfree(cfg);
@@ -1072,6 +1072,9 @@ static int _ioctl_wait_all_jobs_done(unsigned long arg)
 	unsigned int session_id = (unsigned int)arg;
 	struct frame_queue_head_t *head;
 	int ret = 0;
+
+	if (session_id > MAX_SESSION_COUNT - 1)
+		return -EINVAL;
 
 	head = get_frame_queue_head(session_id);
 	if (!head) {
@@ -1322,7 +1325,9 @@ static long _ioctl_query_valid_layer(unsigned long arg)
 		return -EINVAL;
 	}
 
+	mutex_lock(&disp_layer_lock);
 	layering_rule_start(&disp_info_user, 0);
+	mutex_unlock(&disp_layer_lock);
 
 	if (copy_to_user(argp, &disp_info_user, sizeof(disp_info_user))) {
 		DISP_PR_ERR("[FB] copy_to_user failed! line:%d\n", __LINE__);

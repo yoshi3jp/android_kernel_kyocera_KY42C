@@ -1600,7 +1600,10 @@ static int check_layering_result(struct disp_layer_info *info)
 
 int check_disp_info(struct disp_layer_info *disp_info)
 {
-	int disp_idx, ghead, gtail;
+	int disp_idx = 0;
+	int ghead = -1;
+	int gtail = -1;
+	int layer_num = 0;
 
 	if (disp_info == NULL) {
 		DISPERR("[HRT]disp_info is empty\n");
@@ -1608,8 +1611,9 @@ int check_disp_info(struct disp_layer_info *disp_info)
 	}
 
 	for (disp_idx = 0 ; disp_idx < 2 ; disp_idx++) {
+		layer_num = disp_info->layer_num[disp_idx];
 
-		if (disp_info->layer_num[disp_idx] > 0 &&
+		if (layer_num > 0 &&
 			disp_info->input_config[disp_idx] == NULL) {
 			DISPERR("[HRT]input config is empty,disp:%d,l_num:%d\n",
 				disp_idx, disp_info->layer_num[disp_idx]);
@@ -1618,8 +1622,12 @@ int check_disp_info(struct disp_layer_info *disp_info)
 
 		ghead = disp_info->gles_head[disp_idx];
 		gtail = disp_info->gles_tail[disp_idx];
-		if ((ghead < 0 && gtail >= 0) || (gtail < 0 && ghead >= 0)) {
-			dump_disp_info(disp_info, DISP_DEBUG_LEVEL_ERR);
+		if ((!((ghead == -1) && (gtail == -1)) &&
+			!((ghead >= 0) && (gtail >= 0))) ||
+			(ghead >= layer_num) ||
+			(gtail >= layer_num) ||
+			(ghead > gtail)) {
+			//dump_disp_info(disp_info, DISP_DEBUG_LEVEL_ERR);
 			DISPERR("[HRT]gles invalid,disp:%d,head:%d,tail:%d\n",
 				disp_idx, disp_info->gles_head[disp_idx],
 				disp_info->gles_tail[disp_idx]);

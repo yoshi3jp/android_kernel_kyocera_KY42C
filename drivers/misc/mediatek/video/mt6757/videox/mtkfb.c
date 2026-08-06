@@ -1101,7 +1101,7 @@ unsigned int mtkfb_fm_auto_test(void)
 #endif
 	mtkfb_pan_display_impl(&mtkfb_fbi->var, mtkfb_fbi);
 	msleep(100);
-
+	primary_display_idlemgr_kick((char *)__func__, 1);
 	result = primary_display_lcm_ATA();
 
 	if (result == 0)

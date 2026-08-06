@@ -10,6 +10,12 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  */
+/* 
+ * This software is contributed or developed by KYOCERA Corporation. 
+ * (C) 2022 KYOCERA Corporation 
+*/
+
+#define KCDISP_CUST
 
 #include "mt65xx_lcm_list.h"
 #include <lcm_drv.h>
@@ -28,6 +34,23 @@ enum LCM_DSI_MODE_CON lcm_dsi_mode;
 #define LCD_HW_ID_STATUS_ERROR  0x03
 
 struct LCM_DRIVER *lcm_driver_list[] = {
+#ifdef KCDISP_CUST
+#if defined(KC_ILI9806E_FWVGA_DSI_VDO)
+        &kc_ili9806e_fwvga_dsi_vdo_lcm_drv,
+#endif
+
+#if defined(KC_ST7701SI_FWVGA_DSI_VDO)
+        &kc_st7701si_fwvga_dsi_vdo_lcm_drv,
+#endif
+
+#if defined(KC_ST7701SI_FWVGA_DSI_VDO_5A)
+        &kc_st7701si_fwvga_dsi_vdo_5a_lcm_drv,
+#endif
+
+#if defined(KC_AUO_A026QTN01_0_QVGA_DSI_VDO)
+        &kc_auo_a026qtn01_0_qvga_dsi_vdo_lcm_drv,
+#endif
+#endif /* KCDISP_CUST*/
 #if defined(NT36672AH_HDP_DSI_VDO_TCL_CSOT)
 	&nt36672ah_hdp_dsi_vdo_tcl_csot_lcm_drv,
 #endif

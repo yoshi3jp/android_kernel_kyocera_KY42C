@@ -62,6 +62,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <linux/platform_device.h>
 
 #include <linux/of_reserved_mem.h>
+#include <linux/gfp.h>
 
 struct platform_device *gpsPVRCfgDev;
 #endif
@@ -79,24 +80,34 @@ static PVRSRV_DEVICE_CONFIG     gsDevices[1];
 static PHYS_HEAP_FUNCTIONS      gsPhysHeapFuncs;
 static PHYS_HEAP_CONFIG         gsPhysHeapConfig;
 
-int gFWALLOC = 2;
+
 #if defined(CONFIG_MACH_MT6761)
+/* pfnAllocPage can be overriden by gpu_fw_memory_init if condition met */
+struct page* (*pfnAllocPage)(gfp_t gfp_flags, IMG_UINT32 ui32Order)
+	= OSAllocPagesSafe;
 struct reserved_mem gpu_fw_rmem;
 static int __init gpu_fw_memory_init(struct reserved_mem *rmem)
 {
 		gpu_fw_rmem = *rmem;
+	/*
+	 * This code segment reserve 0x5FC00000 ~ 0x5FC002FFF to prevent using
+	 * forbidden PA range in 33-bits clark.
+	 * See detail in osfunc.h:OSAllocPagesSafe()
+	 * This is the lv 1 gaurd, when it init successfully,
+	 * the standard alloc_pages is used otherwise, using OSAllocPagesSafe
+	 */
+	PVR_LOG(("[PVR_K]: %s, name: %s, base: 0x%x, size: 0x%x", __func__,
+		gpu_fw_rmem.name, gpu_fw_rmem.base, gpu_fw_rmem.size));
 
-		PVR_LOG(("[PVR_K]: %s, name: %s, base: 0x%x, size: 0x%x",
-			__func__, gpu_fw_rmem.name, gpu_fw_rmem.base,
-			gpu_fw_rmem.size));
-
-		if (gpu_fw_rmem.base == 0x5fc00000)
+	if (gpu_fw_rmem.base == 0x5fc00000) {
+		pfnAllocPage = OSAllocPages;
 			PVR_LOG(("[PVR_K]: 0x5fc00000+0x3000 reserved"));
-		else {
-			gFWALLOC = 0;
-			PVR_LOG(("[PVR_K]: 0x5fc00000+0x3000 NOT reserved"));
-			PVR_LOG(("[PVR_K]: Enable 2nd level workaround"));
-		}
+	} else {
+		pfnAllocPage = OSAllocPagesSafe;
+		PVR_LOG(("[PVR_K]: 0x5fc00000+0x3000 failed to be reserved"));
+		PVR_LOG(("[PVR_K]: Enable 2nd level guard"));
+	}
+
 		return 0;
 }
 
@@ -332,6 +343,7 @@ PVRSRV_ERROR SysDevInit(void *pvOSDevice, PVRSRV_DEVICE_CONFIG **ppsDevConfig)
 	gsDevices[0].hDevData = &gsRGXData;
 	gsDevices[0].eCacheSnoopingMode = PVRSRV_DEVICE_SNOOP_NONE;
 
+	gsDevices[0].bHasFBCDCVersion31 = IMG_FALSE;
 #if defined(CONFIG_MACH_MT6779)
 	gsDevices[0].bHasFBCDCVersion31 = IMG_TRUE;
 #endif
