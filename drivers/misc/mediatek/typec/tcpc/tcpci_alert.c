@@ -80,6 +80,7 @@ void tcpci_vbus_level_init(struct tcpc_device *tcpc_dev, uint16_t power_status)
 	mutex_unlock(&tcpc_dev->access_lock);
 }
 
+extern void notify_ps_changed_from_typec_port_controller(uint16_t power_status);
 static int tcpci_alert_power_status_changed(struct tcpc_device *tcpc_dev)
 {
 	int rv = 0;
@@ -89,6 +90,8 @@ static int tcpci_alert_power_status_changed(struct tcpc_device *tcpc_dev)
 	rv = tcpci_get_power_status(tcpc_dev, &power_status);
 	if (rv < 0)
 		return rv;
+
+	notify_ps_changed_from_typec_port_controller(power_status);
 
 #ifdef CONFIG_USB_PD_DIRECT_CHARGE
 	if (tcpc_dev->pd_during_direct_charge && tcpc_dev->vbus_level != 0)

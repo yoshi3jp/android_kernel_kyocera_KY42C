@@ -10,6 +10,11 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2019 KYOCERA Corporation
+ */
+
 
 #ifndef __USB20_H__
 #define __USB20_H__
@@ -40,6 +45,7 @@ extern bool upmu_is_chr_det(void);
 extern enum charger_type mt_charger_type_detection(void);
 extern void BATTERY_SetUSBState(int usb_state);
 extern void upmu_interrupt_chrdet_int_en(unsigned int val);
+extern void set_usb_connect_state(bool state);
 
 /* specific USB fuctnion */
 enum CABLE_MODE {
@@ -65,6 +71,11 @@ enum CONNECTION_OPS {
 enum VBUS_OPS {
 	VBUS_OPS_OFF = 0,
 	VBUS_OPS_ON
+};
+
+enum USB_CONNECT_STATE {
+	USB_DISCONNECTED = 0,
+	USB_CONNECTED
 };
 
 #ifdef CONFIG_MTK_UART_USB_SWITCH

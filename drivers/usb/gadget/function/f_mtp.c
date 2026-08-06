@@ -14,6 +14,11 @@
  * GNU General Public License for more details.
  *
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2018 KYOCERA Corporation
+ * (C) 2019 KYOCERA Corporation
+ */
 
 /* #define DEBUG */
 /* #define VERBOSE_DEBUG */
@@ -39,6 +44,7 @@
 #include <linux/configfs.h>
 #include <linux/usb/composite.h>
 
+#include "f_mtp.h"
 #include "configfs.h"
 #ifdef CONFIG_MEDIATEK_SOLUTION
 #include "usb_boost.h"
@@ -62,7 +68,9 @@
 
 /* number of tx and rx requests to allocate */
 #define TX_REQ_MAX 4
+#if 0
 #define RX_REQ_MAX 2
+#endif
 #define INTR_REQ_MAX 5
 
 /* ID for Microsoft MTP OS String */
@@ -211,6 +219,7 @@ static const char mtp_shortname[] = DRIVER_NAME "_usb";
 unsigned int mtp_rx_req_len = MTP_BULK_BUFFER_SIZE;
 unsigned int mtp_tx_req_len = MTP_BULK_BUFFER_SIZE;
 
+#if 0
 struct mtp_dev {
 	struct usb_function function;
 	struct usb_composite_dev *cdev;
@@ -252,6 +261,7 @@ struct mtp_dev {
 	int is_boost;
 	struct cpumask cpu_mask;
 };
+#endif
 
 static struct usb_interface_descriptor mtp_interface_desc = {
 	.bLength                = USB_DT_INTERFACE_SIZE,
@@ -446,6 +456,7 @@ struct mtp_ext_config_desc_function {
 	__u8	reserved[6];
 };
 
+#if 0
 /* MTP Extended Configuration Descriptor */
 struct {
 	struct mtp_ext_config_desc_header	header;
@@ -463,6 +474,7 @@ struct {
 		.compatibleID = { 'M', 'T', 'P' },
 	},
 };
+#endif
 
 struct mtp_device_status {
 	__le16	wLength;
@@ -480,6 +492,7 @@ struct mtp_data_header {
 	__le32	transaction_id;
 };
 
+#if 0
 struct mtp_instance {
 	struct usb_function_instance func_inst;
 	const char *name;
@@ -490,6 +503,7 @@ struct mtp_instance {
 	struct device *mtp_device;
 #endif
 };
+#endif
 
 /* temporary variable used between mtp_open() and mtp_gadget_bind() */
 static struct mtp_dev *_mtp_dev;
@@ -621,6 +635,31 @@ static void mtp_complete_intr(struct usb_ep *ep, struct usb_request *req)
 	mtp_req_put(dev, &dev->intr_idle, req);
 
 	wake_up(&dev->intr_wq);
+}
+
+static void mtp_complete_req_out(struct usb_ep *ep, struct usb_request *req)
+{
+	struct mtp_dev *dev = ep->driver_data;
+
+	req->complete = NULL;
+
+	if (!strncmp(req->buf, &dev->vendor_req[1], 19)) {
+		dev->vendor_req_no = 1;
+		queue_work(dev->wq, &dev->vendor_req_work);
+	} else {
+		printk(KERN_INFO "mtp request error\n");
+	}
+}
+
+static void vendor_req_work(struct work_struct *data)
+{
+	struct mtp_dev *dev = _mtp_dev;
+
+	if (dev->vendor_req_no == 1) {
+		switch_set_state(dev->sdev, 0);
+		switch_set_state(dev->sdev, 2);
+		dev->vendor_req_no = 0;
+	}
 }
 
 static int mtp_create_bulk_endpoints(struct mtp_dev *dev,
@@ -1866,12 +1905,59 @@ static int mtp_ctrlrequest(struct usb_composite_dev *cdev,
 		DBG(cdev, "vendor request: %d index: %d value: %d length: %d\n",
 			ctrl->bRequest, w_index, w_value, w_length);
 
-		if (ctrl->bRequest == 1
-				&& (ctrl->bRequestType & USB_DIR_IN)
-				&& (w_index == 4 || w_index == 5)) {
-			value = (w_length < sizeof(mtp_ext_config_desc) ?
-					w_length : sizeof(mtp_ext_config_desc));
-			memcpy(cdev->req->buf, &mtp_ext_config_desc, value);
+		if((ctrl->bRequest == 1) &&
+				(ctrl->bRequestType & USB_DIR_IN) && (w_index == 4)) {
+			int total = 0;
+			int func_num = 0;
+			int interface_num = 0;
+			struct mtp_ext_config_desc_header *head;
+			struct mtp_ext_config_desc_function *func;
+			struct usb_configuration *cfg;
+			struct usb_function *f;
+
+			head = (struct mtp_ext_config_desc_header *)
+				cdev->req->buf;
+			func = (struct mtp_ext_config_desc_function *)
+				(head + 1);
+
+			/* zero clear */
+			memset(cdev->req->buf, 0x00, USB_COMP_EP0_BUFSIZ);
+
+			list_for_each_entry(cfg, &cdev->configs, list) {
+
+				list_for_each_entry(f, &cfg->functions, list) {
+					if (!f)
+						break;
+
+					interface_num++;
+					func->bFirstInterfaceNumber = func_num;
+					func->bInterfaceCount = 1;
+					if (!strncmp(f->name, "mtp", 3)) {
+						memcpy(func->compatibleID,
+							"MTP", 3);
+						VDBG(cdev,
+							"MTP interface found."
+							"Interface_num: %d.\n",
+							interface_num);
+					}
+					func++;
+					func_num++;
+				}
+			}
+
+			total = sizeof(*head) + (sizeof(*func) * func_num);
+
+			/* header section */
+			head->dwLength = total;
+			head->bcdVersion = __constant_cpu_to_le16(0x0100);
+			head->wIndex = __constant_cpu_to_le16(4);
+			head->bCount = func_num;
+			value = min(w_length, (u16)total);
+		} else if ((ctrl->bRequest == dev->vendor_req[0]) &&
+				((ctrl->bRequestType & USB_DIR_IN) ==  USB_DIR_OUT)) {
+			cdev->gadget->ep0->driver_data = dev;
+			cdev->req->complete = mtp_complete_req_out;
+			value = w_length;
 		}
 	} else if ((ctrl->bRequestType & USB_TYPE_MASK) == USB_TYPE_CLASS) {
 		DBG(cdev, "class request: %d index: %d value: %d length: %d\n",
@@ -2151,6 +2237,9 @@ static int __mtp_setup(struct mtp_instance *fi_mtp)
 	}
 	INIT_WORK(&dev->send_file_work, send_file_work);
 	INIT_WORK(&dev->receive_file_work, receive_file_work);
+	INIT_WORK(&dev->vendor_req_work, vendor_req_work);
+
+	dev->vendor_req_no = 0;
 
 	dev->is_boost = 0;
 	cpumask_setall(&(dev->cpu_mask));
@@ -2445,6 +2534,14 @@ struct usb_function *function_alloc_mtp_ptp(struct usb_function_instance *fi,
 	return &dev->function;
 }
 EXPORT_SYMBOL_GPL(function_alloc_mtp_ptp);
+
+int mtp_set_vendor_req(const char *buf) {
+	if (_mtp_dev == NULL)
+		return -EINVAL;
+
+	return sscanf(buf, "%2x%19s", (unsigned int*)_mtp_dev->vendor_req,
+		&_mtp_dev->vendor_req[1]);
+}
 
 static struct usb_function *mtp_alloc(struct usb_function_instance *fi)
 {

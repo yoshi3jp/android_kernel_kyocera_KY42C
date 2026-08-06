@@ -1237,9 +1237,6 @@ void mtk_disable_q(struct musb *musb, u8 ep_num, u8 isRx)
 	void __iomem *epio = hw_ep->regs;
 	u16 csr;
 
-	mtk_qmu_disable(ep_num, isRx);
-	qmu_reset_gpd_pool(ep_num, isRx);
-
 	musb_ep_select(mbase, ep_num);
 	if (isRx) {
 		csr = musb_readw(epio, MUSB_RXCSR);
@@ -1252,6 +1249,10 @@ void mtk_disable_q(struct musb *musb, u8 ep_num, u8 isRx)
 		musb_writew(epio, MUSB_TXCSR, csr);
 		flush_ep_csr(musb, ep_num, isRx);
 	}
+
+	mtk_qmu_disable(ep_num, isRx);
+	qmu_reset_gpd_pool(ep_num, isRx);
+
 }
 
 void h_qmu_done_rx(struct musb *musb, u8 ep_num)

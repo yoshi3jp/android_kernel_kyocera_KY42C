@@ -553,6 +553,9 @@ static void musb_start_urb(struct musb *musb, int is_in, struct musb_qh *qh)
 				s = "-intr"; break; }; s; }
 				), epnum, buf + offset, len);
 
+	/* record active_urb */
+	qh->active_urb = urb;
+
 	/* Configure endpoint */
 	musb_ep_set_qh(hw_ep, is_in, qh);
 	musb_ep_program(musb, epnum, urb, !is_in, buf, offset, len);
@@ -609,6 +612,12 @@ start:
 static void musb_giveback(struct musb *musb, struct urb *urb, int status)
 __releases(musb->lock) __acquires(musb->lock)
 {
+	struct musb_qh *qh = urb->hcpriv;
+
+	/* remove active_urb */
+	if (qh->active_urb == urb)
+		qh->active_urb = NULL;
+
 	DBG(3, "complete %p %pF (%d), dev%d ep%d%s, %d/%d\n",
 	    urb, urb->complete, status,
 	    usb_pipedevice(urb->pipe),
@@ -835,7 +844,7 @@ check_recycle_qh:
 		}
 	}
 
-	if (qh != NULL && qh->is_ready) {
+	if (qh != NULL && !qh->is_disable) {
 		DBG(3, "[MUSB]... next ep%d %cX urb %p\n",
 		    hw_ep->epnum, is_in ? 'R' : 'T', next_urb(qh));
 #ifdef CONFIG_MTK_MUSB_QMU_SUPPORT
@@ -1871,6 +1880,10 @@ void musb_host_tx(struct musb *musb, u8 epnum)
 		DBG(0, "hw_ep:%d, QH NULL\n", epnum);
 		return;
 	}
+	if (unlikely(!qh->active_urb)) {
+		DBG(0, "hw_ep:%d, !active_urb\n", epnum);
+		return;
+	}
 
 	musb_ep_select(mbase, epnum);
 	tx_csr = musb_readw(epio, MUSB_TXCSR);
@@ -2194,6 +2207,10 @@ void musb_host_rx(struct musb *musb, u8 epnum)
 #endif
 	if (unlikely(!qh)) {
 		DBG(0, "hw_ep:%d, QH NULL\n", epnum);
+		return;
+	}
+	if (unlikely(!qh->active_urb)) {
+		DBG(0, "hw_ep:%d, !active_urb\n", epnum);
 		return;
 	}
 
@@ -3076,10 +3093,13 @@ static int musb_cleanup_urb(struct urb *urb, struct musb_qh *qh)
 		/* giveback saves bulk toggle */
 		csr = musb_h_flush_rxfifo(ep, 0);
 
-		/* REVISIT we still get an irq; should likely clear the
-		 * endpoint's irq status here to avoid bogus irqs.
-		 * clearing that status is platform-specific...
-		 */
+		{
+			u16 int_rx;
+
+			/* w1c current rx irq */
+			int_rx = 1 << ep->epnum;
+			musb_writew(regs, MUSB_INTRRX, int_rx);
+		}
 	} else if (ep->epnum) {
 		musb_h_tx_flush_fifo(ep);
 		csr = musb_readw(epio, MUSB_TXCSR);
@@ -3149,6 +3169,28 @@ static int musb_urb_dequeue(struct usb_hcd *hcd, struct urb *urb, int status)
 	if (qh->is_use_qmu)
 		mtk_disable_q(musb, qh->hw_ep->epnum, is_in);
 #endif
+
+	if (!qh->is_use_qmu && qh->type != USB_ENDPOINT_XFER_CONTROL) {
+		if (qh->active_urb != urb) {
+			//int ready = qh->is_ready;
+			struct musb_hw_ep *hw_ep = qh->hw_ep;
+
+			//qh->is_ready = 0;
+			musb_giveback(musb, urb, 0);
+
+			/* QH might be freed after giveback, check again */
+			if ((is_in && !hw_ep->in_qh)
+					|| (!is_in && !hw_ep->out_qh)
+			   ) {
+				DBG(0, "QH already freed\n");
+				goto done;
+			}
+			//qh->is_ready = ready;
+
+		} else
+			ret = musb_cleanup_urb(urb, qh);
+		goto done;
+	}
 	/*
 	 * Any URB not actively programmed into endpoint hardware can be
 	 * immediately given back; that's any URB not at the head of an
@@ -3281,6 +3323,7 @@ static void musb_h_disable(struct usb_hcd *hcd, struct usb_host_endpoint *hep)
 
 	/* Kick the first URB off the hardware, if needed */
 	qh->is_ready = 0;
+	qh->is_disable = true;
 	if (musb_ep_get_qh(qh->hw_ep, is_in) == qh) {
 		urb = next_urb(qh);
 

@@ -10,6 +10,11 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2019 KYOCERA Corporation
+ * (C) 2020 KYOCERA Corporation
+ */
 
 #ifdef CONFIG_USB_MTK_OTG
 #include <linux/module.h>
@@ -232,6 +237,12 @@ module_param(typec_control, int, 0644);
 static bool typec_req_host;
 static bool iddig_req_host;
 
+#if 1 /* CONFIG_KC_USB_MDM */
+static bool disable_host_mode = true;
+module_param(disable_host_mode, bool, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(disable_host_mode, "To stop HOST mode detection");
+#endif /* CONFIG_KC_USB_MDM */
+
 static void do_host_work(struct work_struct *data);
 static void issue_host_work(int ops, int delay, bool on_st)
 {
@@ -264,6 +275,13 @@ static void issue_host_work(int ops, int delay, bool on_st)
 }
 void mt_usb_host_connect(int delay)
 {
+#if 1 /* CONFIG_KC_USB_MDM */
+	if(disable_host_mode) {
+		DBG(0, "skip USB host mode\n");
+		return;
+	}
+#endif /* CONFIG_KC_USB_MDM */
+
 	typec_req_host = true;
 	DBG(0, "%s\n", typec_req_host ? "connect" : "disconnect");
 	issue_host_work(CONNECTION_OPS_CONN, delay, true);
@@ -315,6 +333,14 @@ static void issue_vbus_work(int ops, int delay)
 static void mt_usb_vbus_on(int delay)
 {
 	DBG(0, "vbus_on\n");
+	
+#if 1 /* CONFIG_KC_USB_MDM */
+	if(disable_host_mode) {
+		DBG(0, "skip USB host mode\n");
+		return;
+	}
+#endif /* CONFIG_KC_USB_MDM */
+
 	issue_vbus_work(VBUS_OPS_ON, delay);
 }
 
@@ -381,9 +407,17 @@ static int otg_tcp_notifier_call(struct notifier_block *nb,
 			mt_usb_connect();
 		} else if (is_peripheral_active(mtk_musb) &&
 			noti->swap_state.new_role == PD_ROLE_DFP) {
-			DBG(0, "switch role to host\n");
-			mt_usb_dev_disconnect();
-			mt_usb_host_connect(0);
+#if 1 /* CONFIG_KC_USB_MDM */
+			if(disable_host_mode) {
+				DBG(0, "skip USB host mode\n");
+			} else {
+#endif /* CONFIG_KC_USB_MDM */
+				DBG(0, "switch role to host\n");
+				mt_usb_dev_disconnect();
+				mt_usb_host_connect(0);
+#if 1 /* CONFIG_KC_USB_MDM */
+			}
+#endif /* CONFIG_KC_USB_MDM */
 		}
 		break;
 	}

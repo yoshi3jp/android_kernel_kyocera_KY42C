@@ -178,7 +178,7 @@ u32 dma_channel_setting, qmu_ioc_setting;
 int mtk_qmu_dbg_level = LOG_WARN;
 int mtk_qmu_max_gpd_num;
 int isoc_ep_end_idx = 3;
-int isoc_ep_gpd_count = 260;
+int isoc_ep_gpd_count = 580;
 module_param(mtk_qmu_dbg_level, int, 0644);
 module_param(mtk_qmu_max_gpd_num, int, 0644);
 module_param(isoc_ep_end_idx, int, 0644);
@@ -1341,6 +1341,9 @@ void musb_start(struct musb *musb)
 
 	musb_platform_enable(musb);
 	musb_generic_disable(musb);
+
+	/*disable USB DCM*/
+	musb_writel(musb->mregs, 0x220, musb_readl(musb->mregs,0x220)|0x400);
 
 	intrusbe = musb_readb(regs, MUSB_INTRUSBE);
 	if (musb->is_host) {

@@ -193,6 +193,12 @@
  * of the Gadget, USB Mass Storage, and SCSI protocols.
  */
 
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2018 KYOCERA Corporation
+ * (C) 2019 KYOCERA Corporation
+ * (C) 2022 KYOCERA Corporation
+ */
 
 /* #define VERBOSE_DEBUG */
 /* #define DUMP_MSGS */
@@ -208,6 +214,7 @@
 #include <linux/kref.h>
 #include <linux/kthread.h>
 #include <linux/limits.h>
+#include <linux/of.h>
 #include <linux/rwsem.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
@@ -227,12 +234,20 @@
 #include "usb_boost.h"
 #endif
 
+#include <linux/switch.h>
+
 /*------------------------------------------------------------------------*/
 
 #define FSG_DRIVER_DESC		"Mass Storage Function"
 #define FSG_DRIVER_VERSION	"2009/09/11"
 
 static const char fsg_string_interface[] = "Mass Storage";
+
+#define VENDOR_NAME		"KYOCERA"
+
+#define PRODUCT_NAME_M		"E4811-MSS"
+#define PRODUCT_NAME_F		"MSS"
+
 
 #include "storage_common.h"
 #include "f_mass_storage.h"
@@ -287,6 +302,10 @@ struct fsg_common {
 	struct fsg_lun		*luns[FSG_MAX_LUNS];
 	struct fsg_lun		*curlun;
 
+#ifdef CONFIG_KC_USB_CDROM
+	unsigned int		curlun_offset;
+#endif /* CONFIG_KC_USB_CDROM */
+
 	unsigned int		bulk_out_maxpacket;
 	enum fsg_state		state;		/* For exception handling */
 	unsigned int		exception_req_tag;
@@ -317,8 +336,20 @@ struct fsg_common {
     /* LUN name for sysfs purpose */
 	char name[FSG_MAX_LUNS][LUN_NAME_LEN];
 
+#ifdef CONFIG_KC_USB_CDROM
+	char lun_mode[16];
+#endif /* CONFIG_KC_USB_CDROM */
+
 	struct kref		ref;
 	u8 bicr;
+
+	/* vendor_cmd (1 char), vendor_data (16 chars) */
+	unsigned char vendor_data[1 + 16];
+	unsigned char vendor_data2[1 + 16];
+#ifdef CONFIG_KC_USB_CDROM
+	unsigned char vendor_data3[1 + 16];
+#endif /* CONFIG_KC_USB_CDROM */
+	struct switch_dev	*sdev;
 };
 
 struct fsg_dev {
@@ -2141,6 +2172,47 @@ static int do_scsi_command(struct fsg_common *common)
 		/* Fall through */
 
 	default:
+		if (common->cmnd[0] == common->vendor_data[0]) {
+			common->data_size_from_cmnd = 0;
+			/* check cmd */
+			if (!strncmp(&common->cmnd[1], &common->vendor_data[1], 15)) {
+				if (fsg_is_set(common)) {
+					switch_set_state(common->sdev, 0);
+					switch_set_state(common->sdev, 3);
+					reply = 0;
+				}
+				else {
+					printk(KERN_ERR "fsg is not set\n");
+					reply = -EINVAL;
+				}
+			} else if(!strncmp(&common->cmnd[1], &common->vendor_data2[1], 15)) {
+				if (fsg_is_set(common)) {
+					switch_set_state(common->sdev, 0);
+					switch_set_state(common->sdev, 3);
+					reply = 0;
+				}
+				else {
+					printk(KERN_ERR "fsg is not set\n");
+					reply = -EINVAL;
+				}
+#ifdef CONFIG_KC_USB_CDROM
+			} else if(!strncmp(&common->cmnd[2], &common->vendor_data3[2], 15)) {
+				if (fsg_is_set(common)) {
+					switch_set_state(common->sdev, 0);
+					switch_set_state(common->sdev, 3);
+					reply = 0;
+				}
+				else {
+					printk(KERN_ERR "fsg is not set\n");
+					reply = -EINVAL;
+				}
+#endif /* CONFIG_KC_USB_CDROM */
+			} else {
+				printk(KERN_ERR "check_cmd error!!\n");
+				reply = -EINVAL;
+			}
+			break;
+		}
 unknown_cmnd:
 		common->data_size_from_cmnd = 0;
 		sprintf(unknown, "Unknown x%02x", common->cmnd[0]);
@@ -2238,7 +2310,11 @@ static int received_cbw(struct fsg_dev *fsg, struct fsg_buffhd *bh)
 		common->data_dir = DATA_DIR_NONE;
 	common->lun = cbw->Lun;
 	if (common->lun < ARRAY_SIZE(common->luns))
+#ifdef CONFIG_KC_USB_CDROM
+		common->curlun = common->luns[common->curlun_offset + common->lun];
+#else
 		common->curlun = common->luns[common->lun];
+#endif /* CONFIG_KC_USB_CDROM */
 	else
 		common->curlun = NULL;
 	common->tag = cbw->Tag;
@@ -2366,9 +2442,15 @@ reset:
 
 	common->running = 1;
 	for (i = 0; i < ARRAY_SIZE(common->luns); ++i)
+#ifdef CONFIG_KC_USB_CDROM
+		if (common->luns[common->curlun_offset + i])
+			common->luns[common->curlun_offset + i]->unit_attention_data =
+				SS_RESET_OCCURRED;
+#else
 		if (common->luns[i])
 			common->luns[i]->unit_attention_data =
 				SS_RESET_OCCURRED;
+#endif /* CONFIG_KC_USB_CDROM */
 	return rc;
 }
 
@@ -3037,6 +3119,19 @@ int fsg_common_create_luns(struct fsg_common *common, struct fsg_config *cfg)
 {
 	char buf[8]; /* enough for 100000000 different numbers, decimal */
 	int i, rc;
+	struct device_node *np;
+
+	cfg->vendor_name        = VENDOR_NAME;
+	np = of_find_node_by_name(NULL, "kc_usb");
+	if(np) {
+		if (of_property_read_bool(np, "kc,vz")) {
+			cfg->product_name       = PRODUCT_NAME_M;
+		} else {
+			cfg->product_name       = PRODUCT_NAME_F;
+		}
+	} else {
+		cfg->product_name       = PRODUCT_NAME_F;
+	}
 
 	fsg_common_remove_luns(common);
 
@@ -3153,6 +3248,7 @@ static int fsg_bind(struct usb_configuration *c, struct usb_function *f)
 	unsigned		max_burst;
 	int			ret;
 	struct fsg_opts		*opts;
+	struct device_node *np;
 
 	/* Don't allow to bind if we don't have at least one LUN */
 	ret = _fsg_common_get_max_lun(common);
@@ -3167,7 +3263,16 @@ static int fsg_bind(struct usb_configuration *c, struct usb_function *f)
 					  fsg->common->can_stall);
 		if (ret)
 			return ret;
-		fsg_common_set_inquiry_string(fsg->common, NULL, NULL);
+		np = of_find_node_by_name(NULL, "kc_usb");
+		if(np) {
+			if (of_property_read_bool(np, "kc,vz")) {
+				fsg_common_set_inquiry_string(fsg->common, VENDOR_NAME, PRODUCT_NAME_M);
+			} else {
+				fsg_common_set_inquiry_string(fsg->common, VENDOR_NAME, PRODUCT_NAME_F);
+			}
+		} else {
+			fsg_common_set_inquiry_string(fsg->common, VENDOR_NAME, PRODUCT_NAME_F);
+		}
 	}
 
 	if (!common->thread_task) {
@@ -3180,6 +3285,9 @@ static int fsg_bind(struct usb_configuration *c, struct usb_function *f)
 			common->state = FSG_STATE_TERMINATED;
 			return ret;
 		}
+#ifdef CONFIG_KC_USB_CDROM
+		strcpy(common->lun_mode, "");
+#endif /* CONFIG_KC_USB_CDROM */
 		DBG(common, "I/O thread pid: %d\n",
 		    task_pid_nr(common->thread_task));
 		wake_up_process(common->thread_task);
@@ -3722,7 +3830,9 @@ static struct usb_function *fsg_alloc(struct usb_function_instance *fi)
 	fsg->function.free_func	= fsg_free;
 
 	fsg->common               = common;
-
+#ifdef CONFIG_KC_USB_CDROM
+	common->curlun_offset = 0;
+#endif /* CONFIG_KC_USB_CDROM */
 	return &fsg->function;
 }
 
@@ -3768,3 +3878,66 @@ void fsg_config_from_params(struct fsg_config *cfg,
 	cfg->fsg_num_buffers = fsg_num_buffers;
 }
 EXPORT_SYMBOL_GPL(fsg_config_from_params);
+
+void set_vendor_sdev(struct fsg_common *common, struct switch_dev *sdevice)
+{
+	common->sdev = sdevice;
+}
+EXPORT_SYMBOL_GPL(set_vendor_sdev);
+
+int set_vendor_cmd_1(const char *buf, struct fsg_common *common)
+{
+	if(common->vendor_data == NULL)
+		return -EINVAL;
+
+	return sscanf(buf, "%2x%16s", (unsigned int*)&common->vendor_data,
+		&common->vendor_data[1]);
+}
+
+int set_vendor_cmd_2(const char *buf, struct fsg_common *common)
+{
+	if(common->vendor_data == NULL)
+		return -EINVAL;
+
+	return sscanf(buf, "%2x%16s", (unsigned int*)&common->vendor_data2,
+		&common->vendor_data2[1]);
+}
+
+#ifdef CONFIG_KC_USB_CDROM
+int set_vendor_cmd_3(const char *buf, struct fsg_common *common)
+{
+	if(common->vendor_data == NULL)
+		return -EINVAL;
+
+	return sscanf(buf, "%2x%16s", (unsigned int*)&common->vendor_data3,
+		&common->vendor_data3[1]);
+}
+
+ssize_t get_lun_chg( char *buf, struct fsg_common *common)
+{
+	return snprintf(buf, PAGE_SIZE, "luns:%u, lun_mode:%s\n", common->lun, common->lun_mode);
+}
+
+int set_lun_chg(const char *buf, struct fsg_common *common)
+{
+	if (strncmp(buf, common->lun_mode, 2)) {
+		if (!strncmp(buf, "cd", 2)) {
+			strcpy(common->lun_mode,"cd");
+			common->curlun_offset = 1;
+			(*common->luns)->cdrom = 1;
+			(*common->luns)->ro = 1;
+			(*common->luns)->removable = 0;
+		} else if (!strncmp(buf, "sd", 2)) {
+			strcpy(common->lun_mode,"sd");
+			fsg_lun_close((*common->luns));
+			common->curlun_offset = 0;
+			(*common->luns)->removable = 1;
+			(*common->luns)->cdrom = 0;
+			(*common->luns)->ro = 1;
+		} else {
+			return -EINVAL;
+		}
+	}
+	return 0;
+}
+#endif /* CONFIG_KC_USB_CDROM */

@@ -12,6 +12,11 @@
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2018 KYOCERA Corporation
+ * (C) 2019 KYOCERA Corporation
+ */
 
 /* #define VERBOSE_DEBUG */
 
@@ -415,7 +420,55 @@ static struct usb_gadget_strings *rndis_strings[] = {
 	NULL,
 };
 
+extern u8 kc_serialnumber[20];
+
 /*-------------------------------------------------------------------------*/
+
+static void set_eth_addr(unsigned char *eth_addr, unsigned char *buff)
+{
+	u64 num = 0;
+	int i, len;
+
+	len = strlen(buff);
+	if (len >= 10) {
+		len = 10;
+	}
+
+	for (i = 0 ; i < len ; i++) {
+		num *= 0x10;
+		num += buff[i] & 0x0f;
+	}
+
+	eth_addr[0] = 0x06;
+	for (i = 5 ; i > 0 ; i-- ){
+		eth_addr[i] =(char)( num & 0xff );
+		num >>= 8;
+	}
+
+	return;
+}
+
+static int android_set_imacaddr(unsigned char *eth_addr)
+{
+	static char *usb_imei = NULL;
+
+	if (!eth_addr)
+		return -EINVAL;
+
+	usb_imei = (char*)kc_serialnumber;
+
+	if (usb_imei != NULL && strlen(usb_imei) >= 10) {
+		set_eth_addr(eth_addr, usb_imei);
+	} else {
+		eth_addr[0]=0x06;
+		eth_addr[1]=0x11;
+		eth_addr[2]=0x22;
+		eth_addr[3]=0x33;
+		eth_addr[4]=0x44;
+		eth_addr[5]=0x55;
+	}
+	return 0;
+}
 
 #ifdef CONFIG_MTK_MD_DIRECT_TETHERING_SUPPORT
 static void rndis_resume_data_control(struct f_rndis *rndis)
@@ -1615,6 +1668,10 @@ static struct usb_function *rndis_alloc(struct usb_function_instance *fi)
 	opts->refcnt++;
 
 	gether_get_host_addr_u8(opts->net, rndis->ethaddr);
+
+	android_set_imacaddr(rndis->ethaddr);
+	pr_debug("%s HOST MAC: %pM\n", __func__, rndis->ethaddr);
+
 	rndis->vendorID = opts->vendor_id;
 	rndis->manufacturer = opts->manufacturer;
 

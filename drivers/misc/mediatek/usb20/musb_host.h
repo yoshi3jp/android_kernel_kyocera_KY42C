@@ -69,10 +69,10 @@ struct musb_qh {
 	u16 frame;		/* for periodic schedule */
 	unsigned int iso_idx;	/* in urb->iso_frame_desc[] */
 	struct sg_mapping_iter sg_miter;	/* for highmem in PIO mode */
-#ifdef CONFIG_MTK_MUSB_QMU_SUPPORT
 	u8 is_use_qmu;
-#endif
 	bool db_used;
+	bool is_disable;
+	struct urb *active_urb;
 };
 
 /* map from control or bulk queue head to the first qh on that ring */

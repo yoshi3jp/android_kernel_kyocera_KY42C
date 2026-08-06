@@ -134,6 +134,9 @@ config U_SERIAL_CONSOLE
 	help
 	   It supports the serial gadget can be used as a console.
 
+config KC_USB_CDROM
+	bool "cdrom support"
+
 source "drivers/usb/gadget/udc/Kconfig"
 
 #

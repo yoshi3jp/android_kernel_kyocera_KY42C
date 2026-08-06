@@ -10,6 +10,11 @@
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2018 KYOCERA Corporation
+ * (C) 2019 KYOCERA Corporation
+ */
 
 /* #define VERBOSE_DEBUG */
 
@@ -63,6 +68,8 @@
 
 static struct workqueue_struct	*uether_wq;
 static struct workqueue_struct	*uether_wq1;
+
+static u8 ether_local_addr[ETH_ALEN];
 
 /*-------------------------------------------------------------------------*/
 
@@ -1259,8 +1266,8 @@ struct eth_dev *gether_setup_name(struct usb_gadget *g,
 		free_netdev(net);
 		dev = ERR_PTR(status);
 	} else {
-		INFO(dev, "MAC %pM\n", net->dev_addr);
-		INFO(dev, "HOST MAC %pM\n", dev->host_mac);
+		DBG(dev, "MAC %pM\n", net->dev_addr);
+		DBG(dev, "HOST MAC %pM\n", dev->host_mac);
 
 		/*
 		 * two kinds of host-initiated state changes:
@@ -1300,8 +1307,13 @@ struct net_device *gether_setup_name_default(const char *netname)
 	dev->qmult = QMULT_DEFAULT;
 	snprintf(net->name, sizeof(net->name), "%s%%d", netname);
 
-	eth_random_addr(dev->dev_mac);
-	pr_warn("using random %s ethernet address\n", "self");
+	if (!ether_local_addr[0]){
+		eth_random_addr(dev->dev_mac);
+		pr_warn("using random %s ethernet address\n", "self");
+		memcpy(ether_local_addr, dev->dev_mac, ETH_ALEN);
+	}
+	memcpy(dev->dev_mac, ether_local_addr, ETH_ALEN);
+
 	eth_random_addr(dev->host_mac);
 	pr_warn("using random %s ethernet address\n", "host");
 
@@ -1330,7 +1342,7 @@ int gether_register_netdev(struct net_device *net)
 		dev_dbg(&g->dev, "register_netdev failed, %d\n", status);
 		return status;
 	} else {
-		INFO(dev, "HOST MAC %pM\n", dev->host_mac);
+		DBG(dev, "HOST MAC %pM\n", dev->host_mac);
 
 		/* two kinds of host-initiated state changes:
 		 *  - iff DATA transfer is active, carrier is "on"
@@ -1346,7 +1358,7 @@ int gether_register_netdev(struct net_device *net)
 	if (status)
 		pr_warn("cannot set self ethernet address: %d\n", status);
 	else
-		INFO(dev, "MAC %pM\n", dev->dev_mac);
+		DBG(dev, "MAC %pM\n", dev->dev_mac);
 
 	return status;
 }
@@ -1688,6 +1700,9 @@ static int __init gether_init(void)
 		pr_info("%s: Unable to create workqueue: uether\n", __func__);
 		return -ENOMEM;
 	}
+
+	memset(ether_local_addr,0x00,ETH_ALEN);
+
 	return 0;
 }
 module_init(gether_init);

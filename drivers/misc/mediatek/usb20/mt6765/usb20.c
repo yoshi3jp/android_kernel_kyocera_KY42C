@@ -10,12 +10,17 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2019 KYOCERA Corporation
+ */
 
 #include <linux/module.h>
 #include <linux/usb/usb_phy_generic.h>
 #include <linux/dma-mapping.h>
 #include <linux/platform_device.h>
 #include <linux/of_address.h>
+#include <linux/switch.h>
 
 #include "musb_core.h"
 #include "mtk_musb.h"
@@ -40,6 +45,8 @@
 
 #ifndef FPGA_PLATFORM
 #include "mtk_spm_resource_req.h"
+
+static bool usb_connect_state = USB_DISCONNECTED;
 
 static int dpidle_status = USB_DPIDLE_ALLOWED;
 module_param(dpidle_status, int, 0644);
@@ -181,6 +188,7 @@ static struct musb_fifo_cfg fifo_cfg[] __initdata = {
 		.ep_mode = EP_ISO, .mode = MUSB_BUF_DOUBLE},
 };
 
+static struct switch_dev sdev;
 
 /*=======================================================================*/
 /* USB GADGET                                                     */
@@ -677,26 +685,49 @@ static void issue_connection_work(int ops)
 void mt_usb_connect(void)
 {
 	DBG(0, "[MUSB] USB connect\n");
+	switch_set_state(&sdev, 0x01);
+	set_usb_connect_state(true);
 	issue_connection_work(CONNECTION_OPS_CONN);
 }
 
 void mt_usb_disconnect(void)
 {
 #ifndef CONFIG_TCPC_CLASS
+	set_usb_connect_state(false);
 	DBG(0, "[MUSB] USB disconnect\n");
 	issue_connection_work(CONNECTION_OPS_DISC);
 #endif
 }
 
+bool is_vbus_active(void)
+{
+#ifdef CONFIG_USB_MTK_OTG
+	return usb_connect_state && !usb20_check_vbus_on();
+#else
+	return usb_connect_state;
+#endif
+}
+EXPORT_SYMBOL(is_vbus_active);
+
+void set_usb_connect_state(bool state)
+{
+	DBG(0, "[MUSB] set_usb_connect_state %d\n", state);
+	usb_connect_state = 
+		state ? USB_CONNECTED : USB_DISCONNECTED;
+}
+
 void mt_usb_dev_disconnect(void)
 {
 	DBG(0, "[MUSB] USB disconnect\n");
+	switch_set_state(&sdev, 0x00);
+	set_usb_connect_state(false);
 	issue_connection_work(CONNECTION_OPS_DISC);
 }
 
 static void mt_usb_reconnect(void)
 {
 	DBG(0, "[MUSB] USB reconnect\n");
+	set_usb_connect_state(true);
 	issue_connection_work(CONNECTION_OPS_CHECK);
 }
 
@@ -1805,7 +1836,7 @@ static int mt_usb_probe(struct platform_device *pdev)
 
 #ifdef CONFIG_MTK_MUSB_QMU_SUPPORT
 	isoc_ep_end_idx = 1;
-	isoc_ep_gpd_count = 550; /* 30 ms for HS, at most (30*8 + 1) */
+	isoc_ep_gpd_count = 500; /* 30 ms for HS, at most (30*8 + 1) */
 
 	mtk_host_qmu_force_isoc_restart = 0;
 #endif
@@ -1863,6 +1894,13 @@ static int mt_usb_probe(struct platform_device *pdev)
 		musb_force_on = 1;
 	}
 #endif
+
+	sdev.name = "usb_cable";
+	ret = switch_dev_register(&sdev);
+	if (unlikely(ret)) {
+		goto err2;
+	}
+
 	return 0;
 
 err2:
@@ -1879,6 +1917,8 @@ static int mt_usb_remove(struct platform_device *pdev)
 
 	platform_device_unregister(glue->musb);
 	kfree(glue);
+
+	switch_dev_unregister(&sdev);
 
 	return 0;
 }

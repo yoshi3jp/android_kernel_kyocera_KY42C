@@ -10,6 +10,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2019 KYOCERA Corporation
+ */
 
 #ifdef CONFIG_MTK_CLKMGR
 #include <mach/mt_clkmgr.h>
@@ -107,14 +111,23 @@ void usb_phy_switch_to_usb(void)
 #define SHFT_RG_USB20_TERM_VREF_SEL 8
 #define OFFSET_RG_USB20_PHY_REV6 0x18
 #define SHFT_RG_USB20_PHY_REV6 30
+#define VAL_MAX_WIDTH_4	0xF
+#define OFFSET_RG_USB20_DISCTH 0x18
+#define SHFT_RG_USB20_DISCTH 4
+#define OFFSET_RG_USB20_SQTH 0x18
+#define SHFT_RG_USB20_SQTH 0
 void usb_phy_tuning(void)
 {
 	static bool inited;
 	static s32 u2_vrt_ref, u2_term_ref, u2_enhance;
+	static s32 u2_discth;
+	static s32 u2_sqth;
 	static struct device_node *of_node;
 
 	if (!inited) {
 		u2_vrt_ref = u2_term_ref = u2_enhance = -1;
+		u2_discth = -1;
+		u2_sqth = -1;
 		of_node = of_find_compatible_node(NULL,
 			NULL, "mediatek,phy_tuning");
 		if (of_node) {
@@ -125,6 +138,10 @@ void usb_phy_tuning(void)
 				"u2_term_ref", (u32 *) &u2_term_ref);
 			of_property_read_u32(of_node,
 				"u2_enhance", (u32 *) &u2_enhance);
+			of_property_read_u32(of_node,
+				"u2_discth", (u32 *) &u2_discth);
+			of_property_read_u32(of_node,
+				"u2_sqth", (u32 *) &u2_sqth);
 		}
 		inited = true;
 	} else if (!of_node)
@@ -152,6 +169,24 @@ void usb_phy_tuning(void)
 				VAL_MAX_WIDTH_2 << SHFT_RG_USB20_PHY_REV6);
 			USBPHY_SET32(OFFSET_RG_USB20_PHY_REV6,
 					u2_enhance<<SHFT_RG_USB20_PHY_REV6);
+		}
+	}
+
+	if (u2_discth != -1) {
+		if (u2_discth <= VAL_MAX_WIDTH_4) {
+			USBPHY_CLR32(OFFSET_RG_USB20_DISCTH,
+				VAL_MAX_WIDTH_4 << SHFT_RG_USB20_DISCTH);
+			USBPHY_SET32(OFFSET_RG_USB20_DISCTH,
+					u2_discth<<SHFT_RG_USB20_DISCTH);
+		}
+	}
+
+	if (u2_sqth != -1) {
+		if (u2_sqth <= VAL_MAX_WIDTH_4) {
+			USBPHY_CLR32(OFFSET_RG_USB20_SQTH,
+				VAL_MAX_WIDTH_4 << SHFT_RG_USB20_SQTH);
+			USBPHY_SET32(OFFSET_RG_USB20_SQTH,
+					u2_sqth<<SHFT_RG_USB20_SQTH);
 		}
 	}
 }
@@ -335,6 +370,10 @@ static void hs_slew_rate_cal(void)
 	unsigned char value;
 	unsigned long start_time, timeout;
 	unsigned int timeout_flag = 0;
+	static bool inited = false;
+	static struct device_node *of_node;
+	static s32 u2_hstx_srctrl = -1;
+
 	/* enable usb ring oscillator. */
 	USBPHY_SET32(0x14, (0x1 << 15));
 
@@ -371,6 +410,19 @@ static void hs_slew_rate_cal(void)
 			value += 1;
 		DBG(1, "[USBPHY]slew calibration:FM_OUT =%lu,x=%lu,value=%d\n",
 				data, x, value);
+	}
+
+	if (!inited) {
+		of_node = of_find_compatible_node(NULL,
+			NULL, "mediatek,phy_tuning");
+		if (of_node) {
+			of_property_read_u32(of_node,
+				"u2_hstx_srctrl", (u32 *) &u2_hstx_srctrl);
+		}
+		inited = true;
+	}
+	if (u2_hstx_srctrl != -1) {
+		value = (unsigned char)u2_hstx_srctrl;
 	}
 
 	/* disable Frequency and disable free run clock. */
@@ -795,6 +847,8 @@ void Charger_Detect_Init(void)
 
 	usb_prepare_enable_clock(false);
 
+	set_usb_connect_state(true);
+
 	DBG(0, "Charger_Detect_Init\n");
 }
 
@@ -814,6 +868,8 @@ void Charger_Detect_Release(void)
 	udelay(1);
 
 	usb_prepare_enable_clock(false);
+
+	set_usb_connect_state(false);
 
 	DBG(0, "Charger_Detect_Release\n");
 }

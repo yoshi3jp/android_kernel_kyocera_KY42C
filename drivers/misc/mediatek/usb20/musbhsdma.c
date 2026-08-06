@@ -276,6 +276,11 @@ static int dma_channel_abort(struct dma_channel *channel)
 	u8 bchannel = musb_channel->idx;
 	int offset;
 	u16 csr;
+	u8 int_hsdma;
+
+	/* w1c current dma irq */
+	int_hsdma = 1 << bchannel;
+	musb_writeb(mbase, MUSB_HSDMA_INTR, int_hsdma);
 
 	if (channel->status == MUSB_DMA_STATUS_BUSY) {
 		if (musb_channel->transmit) {

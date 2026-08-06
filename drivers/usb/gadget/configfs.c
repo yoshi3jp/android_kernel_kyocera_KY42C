@@ -1,3 +1,9 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2018 KYOCERA Corporation
+ * (C) 2019 KYOCERA Corporation
+ */
+
 #include <linux/configfs.h>
 #include <linux/module.h>
 #include <linux/slab.h>
@@ -8,6 +14,10 @@
 #include "configfs.h"
 #include "u_f.h"
 #include "u_os_desc.h"
+
+#include <linux/switch.h>
+#include "f_mtp.h"
+#include "f_mass_storage.h"
 
 #ifdef CONFIG_MTPROF
 #include "bootprof.h"
@@ -35,6 +45,8 @@ static int index;
 
 char *serial_string;
 int serial_idx;
+
+u8 kc_serialnumber[20];
 
 struct device *create_function_device(char *name)
 {
@@ -113,6 +125,8 @@ struct gadget_info {
 	struct work_struct work;
 	struct device *dev;
 #endif
+	struct switch_dev sdev;
+	struct fsg_common *fsg_common;
 };
 
 static inline struct gadget_info *to_gadget_info(struct config_item *item)
@@ -413,6 +427,8 @@ static void gadget_info_attr_release(struct config_item *item)
 {
 	struct gadget_info *gi = to_gadget_info(item);
 
+	switch_dev_unregister(&gi->sdev);
+
 	WARN_ON(!list_empty(&gi->cdev.configs));
 	WARN_ON(!list_empty(&gi->string_list));
 	WARN_ON(!list_empty(&gi->available_func));
@@ -654,6 +670,18 @@ static struct config_group *function_make(
 
 	mutex_lock(&gi->lock);
 	list_add_tail(&fi->cfs_list, &gi->available_func);
+
+	if (!strcmp("mtp", func_name)) {
+		struct mtp_instance *mtp_ins = container_of(fi, struct mtp_instance, func_inst);
+		mtp_ins->dev->sdev = &gi->sdev;
+	}
+
+	if (!strcmp("mass_storage", func_name)) {
+		struct fsg_opts *opts = container_of(fi, struct fsg_opts, func_inst);
+		set_vendor_sdev(opts->common, &gi->sdev);
+		gi->fsg_common = opts->common;
+	}
+
 	mutex_unlock(&gi->lock);
 	return &fi->group;
 }
@@ -1402,6 +1430,17 @@ static int configfs_composite_bind(struct usb_gadget *gadget,
 #ifdef CONFIG_USB_CONFIGFS_UEVENT
 		serial_idx = gi->cdev.desc.iSerialNumber;
 #endif
+
+		if (strlen(s[USB_GADGET_SERIAL_IDX].s) >= 20) {
+			pr_err("%s: kc_serialnumber is 20 digits or more.\n", __func__);
+			memcpy(kc_serialnumber, s[USB_GADGET_SERIAL_IDX].s, 20-1);
+		} else if (strlen(s[USB_GADGET_SERIAL_IDX].s) < 10) {
+			pr_err("%s: kc_serialnumber is 9 digits or less.\n", __func__);
+			memcpy(kc_serialnumber, s[USB_GADGET_SERIAL_IDX].s, strlen(s[USB_GADGET_SERIAL_IDX].s));
+		} else {
+			pr_debug("%s: kc_serialnumber is 9 digits or more and 20 digits or less.\n", __func__);
+			memcpy(kc_serialnumber, s[USB_GADGET_SERIAL_IDX].s, strlen(s[USB_GADGET_SERIAL_IDX].s));
+		}
 	}
 
 	if (gi->use_os_desc) {
@@ -1767,9 +1806,96 @@ out:
 
 static DEVICE_ATTR(state, S_IRUGO, state_show, NULL);
 
+static ssize_t mtp_store_vendor_req(struct device *dev,
+               struct device_attribute *attr, const char *buf, size_t size)
+{
+	if (mtp_set_vendor_req(buf) != 2)
+		return -EINVAL;
+
+	return size;
+}
+
+static DEVICE_ATTR(vendor_req, S_IWUSR | S_IWGRP, 0, mtp_store_vendor_req);
+
+static ssize_t fsg_store_vendor_cmd(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct gadget_info *gi = dev_get_drvdata(dev);
+
+	if (gi->fsg_common == NULL)
+		return -EINVAL;
+	if((set_vendor_cmd_1(buf, gi->fsg_common)) != 2){
+		return -EINVAL;
+	}
+
+	return size;
+}
+static DEVICE_ATTR(vendor_cmd, S_IWUSR | S_IWGRP, 0, fsg_store_vendor_cmd);
+
+static ssize_t fsg_store_vendor_cmd2(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct gadget_info *gi = dev_get_drvdata(dev);
+
+	if (gi->fsg_common == NULL)
+		return -EINVAL;
+	if((set_vendor_cmd_2(buf, gi->fsg_common)) != 2){
+		return -EINVAL;
+	}
+
+	return size;
+}
+static DEVICE_ATTR(vendor_cmd2, S_IWUSR | S_IWGRP, 0, fsg_store_vendor_cmd2);
+
+#ifdef CONFIG_KC_USB_CDROM
+static ssize_t fsg_store_vendor_cmd3(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct gadget_info *gi = dev_get_drvdata(dev);
+
+	if (gi->fsg_common == NULL)
+		return -EINVAL;
+	if((set_vendor_cmd_3(buf, gi->fsg_common)) != 2){
+		return -EINVAL;
+	}
+
+	return size;
+}
+static DEVICE_ATTR(vendor_cmd3, S_IWUSR | S_IWGRP, 0, fsg_store_vendor_cmd3);
+
+static ssize_t lun_chg_show(struct device *dev, struct device_attribute *attr,char *buf)
+{
+	struct gadget_info *gi = dev_get_drvdata(dev);
+
+	return get_lun_chg(buf, gi->fsg_common);
+}
+
+static ssize_t lun_chg_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct gadget_info *gi = dev_get_drvdata(dev);
+
+	if (gi->fsg_common == NULL)
+		return -EINVAL;
+	if((set_lun_chg(buf, gi->fsg_common)) != 0){
+		return -EINVAL;
+	}
+
+	return size;
+}
+static DEVICE_ATTR(lun_chg, S_IRUGO | S_IWUSR, lun_chg_show, lun_chg_store);
+#endif /* CONFIG_KC_USB_CDROM */
+
 static struct device_attribute *android_usb_attributes[] = {
 	&dev_attr_state,
 	&dev_attr_iSerial,
+	&dev_attr_vendor_req,
+	&dev_attr_vendor_cmd,
+	&dev_attr_vendor_cmd2,
+#ifdef CONFIG_KC_USB_CDROM
+	&dev_attr_vendor_cmd3,
+	&dev_attr_lun_chg,
+#endif /* CONFIG_KC_USB_CDROM */
 	NULL
 };
 
@@ -1844,6 +1970,7 @@ static struct config_group *gadgets_make(
 		const char *name)
 {
 	struct gadget_info *gi;
+	int ret;
 
 	gi = kzalloc(sizeof(*gi), GFP_KERNEL);
 	if (!gi)
@@ -1890,6 +2017,12 @@ static struct config_group *gadgets_make(
 
 	if (!gi->composite.gadget_driver.function)
 		goto err;
+
+	gi->sdev.name = "change_mode";
+	ret = switch_dev_register(&gi->sdev);
+	if (unlikely(ret)) {
+		goto err;
+	}
 
 	if (!acm_shortcut() && android_device_create(gi) < 0)
 		goto err;
@@ -1952,6 +2085,8 @@ static int __init gadget_cfs_init(void)
 		return PTR_ERR(android_class);
 	}
 #endif
+
+	memset(kc_serialnumber, '\0', strlen(kc_serialnumber));
 
 	return ret;
 }
