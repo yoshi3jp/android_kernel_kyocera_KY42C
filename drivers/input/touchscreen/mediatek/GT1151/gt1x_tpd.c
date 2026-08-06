@@ -1275,7 +1275,7 @@ void tpd_on(void)
 /* called when loaded into kernel */
 static int __init tpd_driver_init(void)
 {
-	GTP_INFO("Goodix touch panel driver init.");
+    GTP_INFO("Goodix touch panel driver init.");
 	tpd_get_dts_info();
 	if (tpd_driver_add(&tpd_device_driver) < 0)
 		GTP_INFO("add generic driver failed\n");
@@ -1291,3 +1291,4 @@ static void __exit tpd_driver_exit(void)
 
 module_init(tpd_driver_init);
 module_exit(tpd_driver_exit);
+

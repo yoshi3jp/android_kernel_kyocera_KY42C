@@ -10,6 +10,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2022 KYOCERA Corporation
+ */
 
 #ifndef __TPD_H
 #define __TPD_H
@@ -29,6 +33,10 @@
 #include <generated/autoconf.h>
 #include <linux/kobject.h>
 #include <linux/regulator/consumer.h>
+
+//KCTP_CUST +
+#define KCTP_CUST
+//KCTP_CUST +
 
 /*debug macros */
 #define TPD_DEBUG
@@ -165,6 +173,11 @@ extern void tpd_get_dts_info(void);
 #define GTP_INT_PORT    1
 extern void tpd_gpio_as_int(int pin);
 extern void tpd_gpio_output(int pin, int level);
+#ifdef KCTP_CUST
+extern void tpd_vdd_output(int pin, int level);
+extern void tpd_i2c_pinctrl(int status);
+#endif //KCTP_CUST
+
 extern const struct of_device_id touch_of_match[];
 #ifdef TPD_DEBUG_CODE
 #include "tpd_debug.h"

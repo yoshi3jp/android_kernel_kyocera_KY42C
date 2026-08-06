@@ -1,3 +1,5 @@
+# This software is contributed or developed by KYOCERA Corporation.
+# (C) 2022 KYOCERA Corporation
 #
 # Makefile for the input core drivers.
 #
@@ -65,3 +67,6 @@ obj-$(CONFIG_KEYBOARD_TEGRA)		+= tegra-kbc.o
 obj-$(CONFIG_KEYBOARD_TWL4030)		+= twl4030_keypad.o
 obj-$(CONFIG_KEYBOARD_XTKBD)		+= xtkbd.o
 obj-$(CONFIG_KEYBOARD_W90P910)		+= w90p910_keypad.o
+# KCTP_CUST +
+obj-$(CONFIG_KEYBOARD_KCKEYPTR)		+= kckeyptr.o
+# KCTP_CUST -

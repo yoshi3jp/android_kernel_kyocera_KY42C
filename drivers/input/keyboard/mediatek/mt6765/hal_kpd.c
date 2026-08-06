@@ -10,6 +10,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2019 KYOCERA Corporation
+ */
 
 #include <linux/of.h>
 #include <linux/of_address.h>
@@ -33,6 +37,8 @@ struct timer_list Long_press_timer;
 atomic_t vol_up_long_press_flag = ATOMIC_INIT(0);
 atomic_t pow_key_long_press_flag = ATOMIC_INIT(0);
 #endif
+
+static int g_power_on_only_reset = 0;
 
 static void enable_kpd(int enable)
 {
@@ -65,9 +71,13 @@ void long_press_reboot_function_setting(void)
 		kpd_info("Enable normal mode LPRST\n");
 #ifdef CONFIG_ONEKEY_REBOOT_NORMAL_MODE
 		pmic_set_register_value(PMIC_RG_PWRKEY_RST_EN, 0x01);
-		pmic_set_register_value(PMIC_RG_HOMEKEY_RST_EN, 0x00);
+		if(g_power_on_only_reset == 1) {
+			pmic_set_register_value(PMIC_RG_HOMEKEY_RST_EN, 0x00);
+		}else{
+			pmic_set_register_value(PMIC_RG_HOMEKEY_RST_EN, 0x01);
+		}
 		pmic_set_register_value(PMIC_RG_PWRKEY_RST_TD,
-			CONFIG_KPD_PMIC_LPRST_TD);
+			0x01);
 #endif
 
 #ifdef CONFIG_TWOKEY_REBOOT_NORMAL_MODE
@@ -88,9 +98,13 @@ void long_press_reboot_function_setting(void)
 		kpd_info("Enable other mode LPRST\n");
 #ifdef CONFIG_ONEKEY_REBOOT_OTHER_MODE
 		pmic_set_register_value(PMIC_RG_PWRKEY_RST_EN, 0x01);
-		pmic_set_register_value(PMIC_RG_HOMEKEY_RST_EN, 0x00);
+		if(g_power_on_only_reset == 1) {
+			pmic_set_register_value(PMIC_RG_HOMEKEY_RST_EN, 0x00);
+		}else{
+			pmic_set_register_value(PMIC_RG_HOMEKEY_RST_EN, 0x01);
+		}
 		pmic_set_register_value(PMIC_RG_PWRKEY_RST_TD,
-			CONFIG_KPD_PMIC_LPRST_TD);
+			0x01);
 #endif
 
 #ifdef CONFIG_TWOKEY_REBOOT_OTHER_MODE
@@ -187,7 +201,7 @@ void kpd_pmic_rstkey_hal(unsigned long pressed)
 		input_report_key(kpd_input_dev, kpd_dts_data.kpd_sw_rstkey,
 				pressed);
 		input_sync(kpd_input_dev);
-		kpd_print(KPD_SAY "(%s) HW keycode =%d using PMIC\n",
+		kpd_notice(KPD_SAY "(%s) HW keycode =%d using PMIC\n",
 			pressed ? "pressed" : "released",
 				kpd_dts_data.kpd_sw_rstkey);
 
@@ -207,11 +221,27 @@ void kpd_pmic_rstkey_hal(unsigned long pressed)
 	}
 }
 
+/*======The debug function for development======*/
+#include <linux/rtc.h>
+static void key_debug_marker(char *annotation, u32 key_status)
+{
+	struct timespec ts;
+	struct rtc_time tm;
+
+	getnstimeofday(&ts);
+	rtc_time_to_tm(ts.tv_sec, &tm);
+	pr_notice("%s %d %d-%02d-%02d %02d:%02d:%02d.%09lu UTC\n",
+		annotation, key_status, tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+		tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec);
+}
+/*==============================================*/
+
 void kpd_pmic_pwrkey_hal(unsigned long pressed)
 {
+	key_debug_marker("pwrkey input report", pressed);
 	input_report_key(kpd_input_dev, kpd_dts_data.kpd_sw_pwrkey, pressed);
 	input_sync(kpd_input_dev);
-	kpd_print(KPD_SAY "(%s) HW keycode =%d using PMIC\n",
+	kpd_notice(KPD_SAY "(%s) HW keycode =%d using PMIC\n",
 		pressed ? "pressed" : "released", kpd_dts_data.kpd_sw_pwrkey);
 
 #ifdef CONFIG_LONG_PRESS_MODE_EN
@@ -260,5 +290,9 @@ void mt_eint_register(void)
 			IRQF_TRIGGER_NONE, "mrdump_ext_rst-eint", NULL);
 		if (ret > 0)
 			kpd_print("EINT IRQ LINE NOT AVAILABLE\n");
+
+		if (of_property_read_u32(node, "power_on_only_reset", &g_power_on_only_reset)) {
+			g_power_on_only_reset = 0;
+		}
 	}
 }

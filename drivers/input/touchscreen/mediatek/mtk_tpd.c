@@ -10,6 +10,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2022 KYOCERA Corporation
+ */
 #include "tpd.h"
 #include <linux/slab.h>
 #include <linux/device.h>
@@ -49,6 +53,10 @@ struct pinctrl *pinctrl1;
 struct pinctrl_state *pins_default;
 struct pinctrl_state *eint_as_int, *eint_output0,
 		*eint_output1, *rst_output0, *rst_output1;
+#ifdef KCTP_CUST
+struct pinctrl_state *vdd_output0, *vdd_output1;
+struct pinctrl_state *ts_i2c_active, *ts_i2c_sleep;
+#endif //KCTP_CUST
 const struct of_device_id touch_of_match[] = {
 	{ .compatible = "mediatek,touch", },
 	{},
@@ -180,6 +188,31 @@ void tpd_gpio_output(int pin, int level)
 	}
 	mutex_unlock(&tpd_set_gpio_mutex);
 }
+
+#ifdef KCTP_CUST
+void tpd_vdd_output(int pin, int level)
+{
+	mutex_lock(&tpd_set_gpio_mutex);
+	TPD_DEBUG("tpd_vdd_output pin = %d, level = %d\n", pin, level);
+	if (level)
+		pinctrl_select_state(pinctrl1, vdd_output1);
+	else
+		pinctrl_select_state(pinctrl1, vdd_output0);
+	mutex_unlock(&tpd_set_gpio_mutex);
+}
+
+void tpd_i2c_pinctrl(int status)
+{
+	mutex_lock(&tpd_set_gpio_mutex);
+	TPD_DEBUG("tpd_i2c_pinctrl status = %d\n", status);
+	if (status)
+		pinctrl_select_state(pinctrl1, ts_i2c_active);
+	else
+		pinctrl_select_state(pinctrl1, ts_i2c_sleep);
+	mutex_unlock(&tpd_set_gpio_mutex);
+}
+#endif //KCTP_CUST
+
 int tpd_get_gpio_info(struct platform_device *pdev)
 {
 	int ret;
@@ -230,6 +263,36 @@ int tpd_get_gpio_info(struct platform_device *pdev)
 			return ret;
 		}
 	}
+
+	vdd_output0 =
+		pinctrl_lookup_state(pinctrl1, "state_vdd_output0");
+	if (IS_ERR(vdd_output0)) {
+		ret = PTR_ERR(vdd_output0);
+		TPD_DMESG("Cannot find pinctrl state_vdd_output0!\n");
+//		return ret;
+	}
+	vdd_output1 =
+		pinctrl_lookup_state(pinctrl1, "state_vdd_output1");
+	if (IS_ERR(vdd_output1)) {
+		ret = PTR_ERR(vdd_output1);
+		TPD_DMESG("Cannot find pinctrl state_vdd_output1!\n");
+//		return ret;
+	}
+
+	ts_i2c_active = pinctrl_lookup_state(pinctrl1, "state_i2c_active");
+	if (IS_ERR(ts_i2c_active)) {
+		ret = PTR_ERR(ts_i2c_active);
+		TPD_DMESG("Cannot find pinctrl state_i2c_active!\n");
+		return ret;
+	}
+	ts_i2c_sleep = pinctrl_lookup_state(pinctrl1, "state_i2c_sleep");
+	if (IS_ERR(ts_i2c_sleep)) {
+		ret = PTR_ERR(ts_i2c_sleep);
+		TPD_DMESG("Cannot find pinctrl state_i2c_sleep!\n");
+		return ret;
+	}
+
+
 	TPD_DEBUG("[tpd%d] mt_tpd_pinctrl----------\n", pdev->id);
 	return 0;
 }

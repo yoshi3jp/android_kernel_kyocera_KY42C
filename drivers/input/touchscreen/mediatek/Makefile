@@ -19,3 +19,6 @@ obj-$(CONFIG_TOUCHSCREEN_MTK_NT36xxx)	+=  NT36xxx/
 obj-$(CONFIG_TOUCHSCREEN_MTK_NT36572_COMMON)   +=  nt36572_common/
 obj-$(CONFIG_TOUCHSCREEN_MTK_FOCALTECH_HD)	+=  focaltech_hd_touch/
 obj-$(CONFIG_TOUCHSCREEN_MTK_FOCALTECH_FHD)	+=  focaltech_fhd_touch/
+# KCTP_CUST +
+obj-$(CONFIG_TOUCHSCREEN_MTK_PARADE)   +=  kyocera/parade/
+# KCTP_CUST -

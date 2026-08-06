@@ -259,6 +259,7 @@ static int kpd_open(struct input_dev *dev)
 void kpd_get_dts_info(struct device_node *node)
 {
 	int32_t ret;
+	int32_t len;
 
 	of_property_read_u32(node, "mediatek,kpd-key-debounce",
 		&kpd_dts_data.kpd_key_debounce);
@@ -266,8 +267,15 @@ void kpd_get_dts_info(struct device_node *node)
 		&kpd_dts_data.kpd_sw_pwrkey);
 	of_property_read_u32(node, "mediatek,kpd-hw-pwrkey",
 		&kpd_dts_data.kpd_hw_pwrkey);
+
+	if(of_find_property(node, "mediatek,kpd-sw-rstkey-cust", &len)) {
+	of_property_read_u32(node, "mediatek,kpd-sw-rstkey-cust",
+		&kpd_dts_data.kpd_sw_rstkey);
+	}
+	else {
 	of_property_read_u32(node, "mediatek,kpd-sw-rstkey",
 		&kpd_dts_data.kpd_sw_rstkey);
+	}
 	of_property_read_u32(node, "mediatek,kpd-hw-rstkey",
 		&kpd_dts_data.kpd_hw_rstkey);
 	of_property_read_u32(node, "mediatek,kpd-use-extend-type",
