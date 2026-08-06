@@ -10,6 +10,11 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2020 KYOCERA Corporation
+ */
+
 #ifndef __MTK_CHARGER_INTF_H__
 #define __MTK_CHARGER_INTF_H__
 
@@ -29,6 +34,9 @@
 #include <mtk_gauge_time_service.h>
 
 #include <mt-plat/charger_class.h>
+
+#include <tcpm.h>
+#include <tcpci.h>
 
 struct charger_manager;
 #include "mtk_pe_intf.h"
@@ -87,6 +95,25 @@ do {								\
 #define CHG_BAT_LT_STATUS	(1 << 5)
 #define CHG_TYPEC_WD_STATUS	(1 << 6)
 
+/* oem charging log */
+#define OEM_CHGLOG_WARM_LIMIT_BIT	(1 << 0)
+#define OEM_CHGLOG_WARM_STOP_BIT	(1 << 1)
+#define OEM_CHGLOG_COOL_LIMIT_BIT	(1 << 2)
+#define OEM_CHGLOG_COOL_STOP_BIT	(1 << 3)
+#define OEM_CHGLOG_CONN_LIMIT_BIT	(1 << 4)
+#define OEM_CHGLOG_CONN_STOP_BIT	(1 << 5)
+#define OEM_CHGLOG_CHARGER_NG_BIT	(1 << 6)
+#define OEM_CHGLOG_CABLE_NG_BIT		(1 << 7)
+#define OEM_CHGLOG_CHARGER_BAD_BIT	(1 << 8)
+#define OEM_CHGLOG_CABLE_BAD_BIT	(1 << 9)
+#define OEM_CHGLOG_WIRELESS_CHG_BIT	(1 << 10)
+#define OEM_CHGLOG_POOR_CHARGER_BIT (1 << 11)
+#define OEM_CHGLOG_TEMP_MASK		GENMASK(3, 0)
+#define OEM_CHGLOG_MONITOR_MASK		GENMASK(9, 6)
+#define OEM_CHGLOG_MASK				GENMASK(11, 0)
+#define is_oem_chglog_temp_bit(bit) (bit & OEM_CHGLOG_TEMP_MASK)
+#define is_oem_chglog_bit(bit) (bit & OEM_CHGLOG_MASK)
+
 /* charger_algorithm notify charger_dev */
 enum {
 	EVENT_EOC,
@@ -134,6 +161,26 @@ enum bat_temp_state_enum {
 	BAT_TEMP_HIGH
 };
 
+/*-------*/
+enum {
+	OEM_USBIN_INIT = -1,
+	OEM_USBIN_LOW = 0,
+	OEM_USBIN_HIGH = 1,
+};
+
+enum {
+	OEM_CHG_PAD_INIT = -1,
+	OEM_CHG_PAD_DET = 0,
+	OEM_CHG_PAD_REMOVE = 1,
+};
+
+enum {
+	OEM_ACC_PAD_INIT = -1,
+	OEM_ACC_DET = 0,
+	OEM_ACC_REMOVE = 1,
+};
+/*-------*/
+
 struct battery_thermal_protection_data {
 	int sm;
 	bool enable_min_charge_temp;
@@ -161,6 +208,12 @@ struct charger_custom_data {
 	int apple_2_1a_charger_current;
 	int ta_ac_charger_current;
 	int pd_charger_current;
+	int oem_input_current_limit_cc_30;
+	int oem_charging_current_limit_cc_30;
+	int oem_input_current_limit_cc_15;
+	int oem_charging_current_limit_cc_15;
+	int default_input_current_lim;
+	int default_charging_cur_lim;
 
 	/* dynamic mivr */
 	int min_charger_voltage_1;
@@ -185,6 +238,10 @@ struct charger_custom_data {
 	int temp_t0_thres;
 	int temp_t0_thres_plus_x_degree;
 	int temp_neg_10_thres;
+	int oem_jeita_temp_t3_to_t4_cc;
+	int oem_jeita_temp_t2_to_t3_cc;
+	int oem_jeita_temp_t1_to_t2_cc;
+	int oem_jeita_temp_t0_to_t1_cc;
 
 	/* battery temperature protection */
 	int mtk_temperature_recharge_support;
@@ -259,6 +316,31 @@ struct charger_custom_data {
 
 	int vsys_watt;
 	int ibus_err;
+
+	/* oem add */
+	bool	oem_gpio_init;
+	bool	 oem_chattering_flag;
+	int		*oem_cycle_count_thresh;
+	int		*oem_cycle_count_fv_comp_mv;
+	int		oem_cycle_count_levels;
+	int		*oem_cont_chg_thresh;
+	int		*oem_cont_chg_fv_comp_mv;
+	int		oem_cont_chg_levels;
+	int		*oem_batt_temp_thresh;
+	int		*oem_cont_chg_factor;
+	int		oem_cont_chg_factor_levels;
+	int		oem_batt_care_uv;
+	int		oem_usb_gpio;
+	int		oem_usb_gpio_val;
+	int		oem_chg_pad_gpio;
+	int		oem_chg_pad_gpio_val;
+	int		oem_acc_det_gpio;
+	int		oem_acc_det_gpio_val;
+	int		oem_input_current_limit_chgpad;
+	int		oem_charging_current_limit_chgpad;
+	int		oem_input_current_limit_kcacc;
+	int		oem_charging_current_limit_kcacc;
+	struct	delayed_work	oem_chg_pad_chattering_work;
 };
 
 struct charger_data {
@@ -271,6 +353,12 @@ struct charger_data {
 	int input_current_limit_by_aicl;
 	int junction_temp_min;
 	int junction_temp_max;
+	int full_charging_capacity;
+	int vbat_limitation;
+	int fact_chg_time;
+	int sdp_charging_current;
+	bool is_factory_use;
+	int step_chg_cnt;
 };
 
 struct charger_manager {
@@ -392,6 +480,15 @@ struct charger_manager {
 
 	/* dynamic mivr */
 	bool enable_dynamic_mivr;
+
+	/* oem add */
+	struct power_supply		*oem_batt_psy;
+	struct power_supply		*oem_chg_psy;
+	bool					oem_charging_initialized;
+
+	bool oem_auto_on_detect;
+	bool oem_chgpad_detect;
+	bool oem_acc_detect;
 };
 
 /* charger related module interface */
@@ -415,10 +512,17 @@ extern int pmic_is_bif_exist(void);
 extern int pmic_enable_hw_vbus_ovp(bool enable);
 extern bool pmic_is_battery_exist(void);
 
+extern void check_dock(void);
+extern void check_dock_hole(void);
+
 
 extern void notify_adapter_event(enum adapter_type type, enum adapter_event evt,
 	void *val);
 
+extern int mtk_charger_usb_therm_det(void);
+extern int oem_chglog_change(int bit, bool detect);
+extern int oem_chglog_thermal_check(int current_limit);
+extern int get_prop_batt_status(void);
 
 /* FIXME */
 enum usb_state_enum {
@@ -447,5 +551,21 @@ static const struct file_operations mtk_chg_##name##_fops = {		\
 	.release = single_release,					\
 	.write = mtk_chg_##name##_write,				\
 }
+
+#define MAX_STEP_CHG_ENTRIES	32
+#define RANGE_DATA_ENTRIES	3
+
+struct range_data {
+	u32 low_threshold;
+	u32 high_threshold;
+	u32 value;
+};
+
+struct step_chg_cfg {
+	int			entries;
+	int			hysteresis;
+	struct range_data	fcc_cfg[MAX_STEP_CHG_ENTRIES];
+	struct range_data	fcc_cfg_low[MAX_STEP_CHG_ENTRIES];
+};
 
 #endif /* __MTK_CHARGER_INTF_H__ */

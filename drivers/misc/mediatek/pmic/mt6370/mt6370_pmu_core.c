@@ -179,6 +179,17 @@ static int mt6370_pmu_core_reset(struct mt6370_pmu_core_data *core_data)
 					 2, pascode);
 	if (ret < 0)
 		dev_err(core_data->dev, "excute reset pascode fail\n");
+
+	/* check need to enter shipping mode or not */
+	if (core_data->chip->shipping_mode_en) {
+		ret = mt6370_pmu_reg_write(core_data->chip,
+					   MT6370_PMU_REG_CHGCTRL2, 0xc0);
+		if (ret < 0)
+			dev_err(core_data->dev, "enter shipping mode fail\n");
+		else
+			dev_info(core_data->dev, "enter shipping mode done\n");
+	}
+
 	/* add dsvp discharge bit */
 	return mt6370_pmu_reg_write(core_data->chip,
 				    MT6370_PMU_REG_DBCTRL2, 0x32);

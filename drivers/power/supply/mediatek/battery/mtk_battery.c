@@ -75,7 +75,6 @@
 /* ============================================================ */
 #define NETLINK_FGD 26
 
-
 /************ adc_cali *******************/
 #define ADC_CALI_DEVNAME "MT_pmic_adc_cali"
 #define TEST_ADC_CALI_PRINT _IO('k', 0)
@@ -123,6 +122,9 @@ static enum power_supply_property battery_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_FULL,
 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 	POWER_SUPPLY_PROP_TEMP,
+	POWER_SUPPLY_PROP_OEM_BATTERY_AGING,
+	POWER_SUPPLY_PROP_OEM_CHARGING_LOG,
+	POWER_SUPPLY_PROP_OEM_CHARGER_STATUS,
 };
 
 /* weak function */
@@ -302,6 +304,74 @@ void battery_update_psd(struct battery_data *bat_data)
 	bat_data->BAT_batt_temp = battery_get_bat_temperature();
 }
 
+enum {
+	DETERIORATION_STATUS_GOOD,
+	DETERIORATION_STATUS_NORM,
+	DETERIORATION_STATUS_DEAD,
+	DETERIORATION_STATUS_INIT
+};
+
+static int oem_bms_get_deterioration_status(struct battery_data *data)
+{
+	static int deterioration_status = DETERIORATION_STATUS_INIT;
+	int deterioration_degree;
+	int new_deterioration_status;
+
+	deterioration_degree = (gm.aging_factor / UNIT_TRANS_100);
+	pr_debug("deterioration_degree:%d\n", deterioration_degree);
+
+	switch (deterioration_status) {
+	case DETERIORATION_STATUS_INIT:
+		if (deterioration_degree >= data->BAT_oem_deterioration_thresh_good) {
+			new_deterioration_status = DETERIORATION_STATUS_GOOD;
+		}
+		else if (deterioration_degree >= data->BAT_oem_deterioration_thresh_norm) {
+			new_deterioration_status = DETERIORATION_STATUS_NORM;
+		}
+		else {
+			new_deterioration_status = DETERIORATION_STATUS_DEAD;
+		}
+		break;
+	case DETERIORATION_STATUS_GOOD:
+		if (deterioration_degree >= data->BAT_oem_deterioration_thresh_good) {
+			new_deterioration_status = DETERIORATION_STATUS_GOOD;
+		}
+		else {
+			new_deterioration_status = DETERIORATION_STATUS_NORM;
+		}
+		break;
+	case DETERIORATION_STATUS_NORM:
+		if (deterioration_degree >= data->BAT_oem_deterioration_thresh_normtogood) {
+			new_deterioration_status = DETERIORATION_STATUS_GOOD;
+		}
+		else if (deterioration_degree >= data->BAT_oem_deterioration_thresh_norm) {
+			new_deterioration_status = DETERIORATION_STATUS_NORM;
+		}
+		else {
+			new_deterioration_status = DETERIORATION_STATUS_DEAD;
+		}
+		break;
+	case DETERIORATION_STATUS_DEAD:
+		if (deterioration_degree >= data->BAT_oem_deterioration_thresh_deadtonorm) {
+			new_deterioration_status = DETERIORATION_STATUS_NORM;
+		}
+		else {
+			new_deterioration_status = DETERIORATION_STATUS_DEAD;
+		}
+		break;
+	default:
+		pr_err("invalid deterioration_status:%d\n", deterioration_status);
+		new_deterioration_status = DETERIORATION_STATUS_GOOD;
+		break;
+	}
+
+	if (deterioration_status != new_deterioration_status) {
+		pr_info("deterioration_status %d -> %d\n", deterioration_status, new_deterioration_status);
+		deterioration_status = new_deterioration_status;
+	}
+	return deterioration_status;
+}
+
 static int battery_get_property(struct power_supply *psy,
 	enum power_supply_property psp,
 	union power_supply_propval *val)
@@ -361,13 +431,68 @@ static int battery_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TEMP:
 		val->intval = gm.tbat_precise;
 		break;
-
+	case POWER_SUPPLY_PROP_OEM_BATTERY_AGING:
+		if(fg_cust_data.embedded_sel) {
+			val->intval = oem_bms_get_deterioration_status(data);
+		}else{
+			val->intval = -1;
+		}
+		break;
+	case POWER_SUPPLY_PROP_OEM_CHARGING_LOG:
+		val->intval = data->BAT_oem_chg_log;
+		break;
+	case POWER_SUPPLY_PROP_OEM_CHARGER_STATUS:
+		val->intval = data->BAT_oem_charger_status;
+		break;
 	default:
 		ret = -EINVAL;
 		break;
 	}
 
 	return ret;
+}
+
+static int battery_set_property(struct power_supply *psy,
+	enum power_supply_property psp,
+	const union power_supply_propval *val)
+{
+	int ret = 0;
+
+	struct battery_data *data =
+		container_of(psy->desc, struct battery_data, psd);
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_HEALTH:
+		data->BAT_HEALTH = val->intval;
+		break;
+	case POWER_SUPPLY_PROP_OEM_CHARGING_LOG:
+		data->BAT_oem_chg_log = val->intval;
+		break;
+	case POWER_SUPPLY_PROP_OEM_CHARGER_STATUS:
+		data->BAT_oem_charger_status = val->intval;
+		break;
+
+	default:
+		ret = -EINVAL;
+		break;
+	}
+	power_supply_changed(psy);
+
+	return ret;
+}
+
+static int battery_writable_property(struct power_supply *psy,
+					enum power_supply_property psp)
+{
+	switch (psp) {
+	case POWER_SUPPLY_PROP_HEALTH:
+	case POWER_SUPPLY_PROP_OEM_CHARGING_LOG:
+		return 1;
+	default:
+		break;
+	}
+
+	return 0;
 }
 
 /* battery_data initialization */
@@ -378,6 +503,8 @@ struct battery_data battery_main = {
 		.properties = battery_props,
 		.num_properties = ARRAY_SIZE(battery_props),
 		.get_property = battery_get_property,
+		.set_property = battery_set_property,
+		.property_is_writeable = battery_writable_property,
 		},
 
 	.BAT_STATUS = POWER_SUPPLY_STATUS_DISCHARGING,
@@ -387,6 +514,12 @@ struct battery_data battery_main = {
 	.BAT_CAPACITY = -1,
 	.BAT_batt_vol = 0,
 	.BAT_batt_temp = 0,
+	.BAT_oem_full_flg = false,
+	.BAT_oem_charger_status = 0,
+	.BAT_oem_deterioration_thresh_good = 80,
+	.BAT_oem_deterioration_thresh_norm = 50,
+	.BAT_oem_deterioration_thresh_normtogood = 85,
+	.BAT_oem_deterioration_thresh_deadtonorm = 60,
 };
 
 void evb_battery_init(void)
@@ -398,6 +531,12 @@ void evb_battery_init(void)
 	battery_main.BAT_CAPACITY = 100;
 	battery_main.BAT_batt_vol = 4200;
 	battery_main.BAT_batt_temp = 22;
+	battery_main.BAT_oem_full_flg = false;
+	battery_main.BAT_oem_charger_status = 0;
+	battery_main.BAT_oem_deterioration_thresh_good = 80;
+	battery_main.BAT_oem_deterioration_thresh_norm = 50;
+	battery_main.BAT_oem_deterioration_thresh_normtogood = 85;
+	battery_main.BAT_oem_deterioration_thresh_deadtonorm = 60;
 }
 
 static void disable_fg(void)
@@ -1230,9 +1369,9 @@ int BattThermistorConverTemp(int Res)
 	int TBatt_Value = -2000, TMP1 = 0, TMP2 = 0;
 
 	if (Res >= Fg_Temperature_Table[0].TemperatureR) {
-		TBatt_Value = -400;
+		TBatt_Value = Fg_Temperature_Table[0].BatteryTemp * 10;
 	} else if (Res <= Fg_Temperature_Table[20].TemperatureR) {
-		TBatt_Value = 600;
+		TBatt_Value = Fg_Temperature_Table[20].BatteryTemp * 10;
 	} else {
 		RES1 = Fg_Temperature_Table[0].TemperatureR;
 		TMP1 = Fg_Temperature_Table[0].BatteryTemp;
@@ -3485,15 +3624,24 @@ static int battery_callback(
 		{
 /* CHARGING FULL */
 			notify_fg_chr_full();
+			battery_main.BAT_oem_full_flg = true;
+			if ( battery_main.BAT_CAPACITY == 100 ){
+				bm_err("%s KC_DEBUG CHARGE_FULL\n",__func__);
+				battery_main.BAT_STATUS = POWER_SUPPLY_STATUS_FULL;
+				battery_update(&battery_main);
+			}
 		}
 		break;
 	case CHARGER_NOTIFY_START_CHARGING:
 		{
 /* START CHARGING */
 			fg_sw_bat_cycle_accu();
+			oem_charger_clear_chglog();
 
+			battery_main.BAT_oem_full_flg = false;
 			battery_main.BAT_STATUS = POWER_SUPPLY_STATUS_CHARGING;
 			battery_update(&battery_main);
+			oem_charger_check_conn();
 		}
 		break;
 	case CHARGER_NOTIFY_STOP_CHARGING:
@@ -3503,6 +3651,8 @@ static int battery_callback(
 			battery_main.BAT_STATUS =
 			POWER_SUPPLY_STATUS_DISCHARGING;
 			battery_update(&battery_main);
+
+			oem_charger_check_conn();
 		}
 		break;
 	case CHARGER_NOTIFY_ERROR:
@@ -3892,6 +4042,11 @@ static int __init battery_probe(struct platform_device *dev)
 	const char *boot_voltage = NULL;
 	char boot_voltage_tmp[10];
 	int boot_voltage_len = 0;
+	const char *oem_batt_care_mode = NULL;
+	char oem_batt_care_mode_tmp[10];
+	int oem_batt_care_mode_len = 0;
+	struct device_node *np;
+	int i,np_idx = 0;
 
 	wakeup_source_init(&battery_lock, "battery wakelock");
 	__pm_stay_awake(&battery_lock);
@@ -3913,6 +4068,61 @@ static int __init battery_probe(struct platform_device *dev)
 					adc_cali_devno,
 					NULL, ADC_CALI_DEVNAME);
 /*****************************/
+	np = of_find_node_by_name(NULL, "kc_battery");
+	if (np) {
+		for(i = 0; i < 21; i++) {
+			of_property_read_u32_index(np, "kc_battery_temperature", np_idx, &Fg_Temperature_Table[i].BatteryTemp);
+			np_idx++;
+			of_property_read_u32_index(np, "kc_battery_temperature", np_idx, &Fg_Temperature_Table[i].TemperatureR);
+			np_idx++;
+		}
+	}else{
+		pr_notice("%s : can not find kc_battery node\n", __func__);
+	}
+	for(i = 0; i < 21; i++) {
+		pr_notice("%s : [%d] : BatteryTemp %d : TemperatureR %d\n", __func__, i , Fg_Temperature_Table[i].BatteryTemp, Fg_Temperature_Table[i].TemperatureR);
+	}
+
+	np = of_find_node_by_name(NULL, "kc_deter_param");
+	if (np) {
+		ret = of_property_read_u32(np, "oem,deterioration-thresh-good", &battery_main.BAT_oem_deterioration_thresh_good);
+		if (ret < 0) {
+			pr_err("Failed to read oem,deterioration-thresh-good ret:%d\n", ret);
+		}
+		ret = of_property_read_u32(np, "oem,deterioration-thresh-norm", &battery_main.BAT_oem_deterioration_thresh_norm);
+		if (ret < 0) {
+			pr_err("Failed to read oem,deterioration-thresh-norm ret:%d\n", ret);
+		}
+		ret = of_property_read_u32(np, "oem,deterioration-thresh-normtogood", &battery_main.BAT_oem_deterioration_thresh_normtogood);
+		if (ret < 0) {
+			pr_err("Failed to read oem,deterioration-thresh-normtogood ret:%d\n", ret);
+		}
+		ret = of_property_read_u32(np, "oem,deterioration-thresh-deadtonorm", &battery_main.BAT_oem_deterioration_thresh_deadtonorm);
+		if (ret < 0) {
+			pr_err("Failed to read oem,deterioration-thresh-deadtonorm ret:%d\n", ret);
+		}
+	} else {
+		pr_notice("%s : can not find kc_deter_param node\n", __func__);
+	}
+
+	if (of_scan_flat_dt(fb_early_init_dt_get_chosen, NULL) > 0)
+		oem_batt_care_mode =
+		of_get_flat_dt_prop(
+			bat_node, "atag,batt_care_mode",
+			&oem_batt_care_mode_len);
+	if (oem_batt_care_mode == NULL) {
+		bm_err(" oem_batt_care_mode == NULL len = %d\n", oem_batt_care_mode_len);
+	} else {
+		snprintf(
+			oem_batt_care_mode_tmp, (oem_batt_care_mode_len + 1),
+			"%s", oem_batt_care_mode);
+		ret = kstrtoint(oem_batt_care_mode_tmp, 10, &gm.oem_batt_care_mode_val);
+
+		bm_err(
+			"oem_batt_care_mode=%s len %d oem_batt_care_mode_tmp %s oem_batt_care_mode[%d]\n",
+			oem_batt_care_mode, oem_batt_care_mode_len,
+			oem_batt_care_mode_tmp, gm.oem_batt_care_mode_val);
+	}
 
 	mtk_battery_init(dev);
 

@@ -10,6 +10,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2020 KYOCERA Corporation
+ */
 
 #include <generated/autoconf.h>
 #include <linux/kernel.h>
@@ -133,6 +137,10 @@ struct mt_charger {
 	struct chg_type_info *cti;
 	bool chg_online; /* Has charger in or not */
 	enum charger_type chg_type;
+#ifdef CONFIG_USB_THERMAL
+	int usb_temp;
+#endif
+	int dock_state;
 };
 
 static int mt_charger_online(struct mt_charger *mtk_chg)
@@ -171,6 +179,9 @@ static int mt_charger_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CHARGE_TYPE:
 		val->intval = mtk_chg->chg_type;
 		break;
+	case POWER_SUPPLY_PROP_OEM_DOCK:
+		val->intval = mtk_chg->dock_state;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -195,10 +206,18 @@ static int mt_charger_set_property(struct power_supply *psy,
 	switch (psp) {
 	case POWER_SUPPLY_PROP_ONLINE:
 		mtk_chg->chg_online = val->intval;
-		mt_charger_online(mtk_chg);
+		if (mtk_charger_usb_therm_det() < 95)
+		  mt_charger_online(mtk_chg);
 		return 0;
 	case POWER_SUPPLY_PROP_CHARGE_TYPE:
+		oem_chglog_change(OEM_CHGLOG_WIRELESS_CHG_BIT, false);
+		if (val->intval == WIRELESS_CHARGER) {
+			oem_chglog_change(OEM_CHGLOG_WIRELESS_CHG_BIT, true);
+		}
 		mtk_chg->chg_type = val->intval;
+		break;
+	case POWER_SUPPLY_PROP_OEM_DOCK:
+		mtk_chg->dock_state = val->intval;
 		break;
 	default:
 		return -EINVAL;
@@ -217,7 +236,8 @@ static int mt_charger_set_property(struct power_supply *psy,
 			mt_usb_disconnect();
 	}
 
-	queue_work(cti->chg_in_wq, &cti->chg_in_work);
+	if (psp != POWER_SUPPLY_PROP_OEM_DOCK)
+		queue_work(cti->chg_in_wq, &cti->chg_in_work);
 
 	power_supply_changed(mtk_chg->ac_psy);
 	power_supply_changed(mtk_chg->usb_psy);
@@ -248,6 +268,8 @@ static int mt_ac_get_property(struct power_supply *psy,
 	return 0;
 }
 
+unsigned g_is_moisture_detected = 0;
+
 static int mt_usb_get_property(struct power_supply *psy,
 	enum power_supply_property psp, union power_supply_propval *val)
 {
@@ -267,15 +289,62 @@ static int mt_usb_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		val->intval = 5000000;
 		break;
+	case POWER_SUPPLY_PROP_MOISTURE_DETECTED:
+		val->intval = g_is_moisture_detected;
+		break;
+#ifdef CONFIG_USB_THERMAL
+	case POWER_SUPPLY_PROP_OEM_USB_THERMAL:
+		val->intval = mtk_chg->usb_temp;
+		break;
+#endif
 	default:
 		return -EINVAL;
 	}
 
 	return 0;
 }
+#ifdef CONFIG_USB_THERMAL
+static int mt_usb_writable_property(struct power_supply *psy,
+			enum power_supply_property psp)
+{
+	switch (psp) {
+		case POWER_SUPPLY_PROP_OEM_USB_THERMAL:
+			return 1;
+		default:
+			return 0;
+	}
+}
+
+static int mt_usb_set_property(struct power_supply *psy,
+			enum power_supply_property psp,
+			const union power_supply_propval *val)
+{
+	struct mt_charger *mtk_chg = power_supply_get_drvdata(psy);
+
+	pr_info("%s\n", __func__);
+
+	if (!mtk_chg) {
+		pr_notice("%s: no mtk chg data\n", __func__);
+		return -EINVAL;
+	}
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_OEM_USB_THERMAL:
+		mtk_chg->usb_temp = val->intval;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	power_supply_changed(mtk_chg->usb_psy);
+
+	return 0;
+}
+#endif
 
 static enum power_supply_property mt_charger_properties[] = {
 	POWER_SUPPLY_PROP_ONLINE,
+	POWER_SUPPLY_PROP_OEM_DOCK,
 };
 
 static enum power_supply_property mt_ac_properties[] = {
@@ -286,6 +355,11 @@ static enum power_supply_property mt_usb_properties[] = {
 	POWER_SUPPLY_PROP_ONLINE,
 	POWER_SUPPLY_PROP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
+	POWER_SUPPLY_PROP_MOISTURE_DETECTED,
+#ifdef CONFIG_USB_THERMAL
+	POWER_SUPPLY_PROP_OEM_USB_THERMAL,
+	//POWER_SUPPLY_PROP_TEMP,
+#endif
 };
 
 static void tcpc_power_off_work_handler(struct work_struct *work)
@@ -333,7 +407,7 @@ static int pd_tcp_notifier_call(struct notifier_block *pnb,
 		    noti->typec_state.old_state == TYPEC_ATTACHED_CUSTOM_SRC ||
 			noti->typec_state.old_state == TYPEC_ATTACHED_NORP_SRC)
 			&& noti->typec_state.new_state == TYPEC_UNATTACHED) {
-			if (cti->tcpc_kpoc) {
+			if (cti->tcpc_kpoc && (mtk_charger_usb_therm_det() < 95)) {
 				vbus = battery_get_vbus();
 				pr_info("%s KPOC Plug out, vbus = %d\n",
 					__func__, vbus);
@@ -430,6 +504,11 @@ static int mt_charger_probe(struct platform_device *pdev)
 	mt_chg->usb_desc.properties = mt_usb_properties;
 	mt_chg->usb_desc.num_properties = ARRAY_SIZE(mt_usb_properties);
 	mt_chg->usb_desc.get_property = mt_usb_get_property;
+#ifdef CONFIG_USB_THERMAL
+	mt_chg->usb_desc.set_property = mt_usb_set_property;
+	mt_chg->usb_desc.property_is_writeable = mt_usb_writable_property;
+	mt_chg->usb_temp = 25; //usb ntc temp default,
+#endif
 	mt_chg->usb_cfg.drv_data = mt_chg;
 
 	mt_chg->chg_psy = power_supply_register(&pdev->dev,

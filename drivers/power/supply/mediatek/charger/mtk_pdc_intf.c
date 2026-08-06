@@ -442,6 +442,9 @@ int mtk_pdc_get_setting(struct charger_manager *info, int *newvbus, int *newcur,
 	bool chg1_mivr = false;
 	bool chg2_mivr = false;
 	bool chg2_enable = false;
+	int max_ma = 0;
+	int min_ma = 0;
+	int input_current_lim_ma = 0;
 
 	mtk_pdc_init_table(info);
 	mtk_pdc_get_reset_idx(info);
@@ -506,12 +509,32 @@ int mtk_pdc_get_setting(struct charger_manager *info, int *newvbus, int *newcur,
 	if (idx < 0 || idx >= ADAPTER_CAP_MAX_NR)
 		idx = selected_idx = 0;
 
+#if 1
+	max_ma = cap->ma[idx];
+	min_ma = cap->ma[pd->pd_buck_idx];
+
+	input_current_lim_ma = info->data.default_input_current_lim / 1000;
+
+	if (cap->ma[idx] > input_current_lim_ma)
+		max_ma = input_current_lim_ma;
+
+	if (cap->ma[pd->pd_buck_idx] > input_current_lim_ma)
+		min_ma = input_current_lim_ma;
+
+	pd_max_watt = cap->max_mv[idx] * (max_ma
+			/ 100 * (100 - info->data.ibus_err) - 100);
+	now_max_watt = cap->max_mv[idx] * ibus;
+	pd_min_watt = cap->max_mv[pd->pd_buck_idx] * min_ma
+			/ 100 * (100 - info->data.ibus_err)
+			- info->data.vsys_watt;
+#else
 	pd_max_watt = cap->max_mv[idx] * (cap->ma[idx]
 			/ 100 * (100 - info->data.ibus_err) - 100);
 	now_max_watt = cap->max_mv[idx] * ibus + chg2_watt;
 	pd_min_watt = cap->max_mv[pd->pd_buck_idx] * cap->ma[pd->pd_buck_idx]
 			/ 100 * (100 - info->data.ibus_err)
 			- info->data.vsys_watt;
+#endif
 
 	if (pd_min_watt <= 5000000)
 		pd_min_watt = 5000000;

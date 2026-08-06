@@ -69,11 +69,13 @@ static void wake_up_power_misc(struct shutdown_controller *sdd)
 	wake_up(&sdd->wait_que);
 }
 
+#if 0
 static void wake_up_overheat(struct shutdown_controller *sdd)
 {
 	sdd->overheat = true;
 	wake_up(&sdd->wait_que);
 }
+#endif
 
 void set_shutdown_vbat_lt(int vbat_lt, int vbat_lt_lv1)
 {
@@ -535,8 +537,9 @@ int mtk_power_misc_psy_event(
 				bm_err(
 					"battery temperature >= %d,shutdown",
 					tmp);
-
+#if 0
 				wake_up_overheat(&sdc);
+#endif
 			}
 		}
 	}

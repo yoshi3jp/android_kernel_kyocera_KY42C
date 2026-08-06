@@ -10,6 +10,12 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2019 KYOCERA Corporation
+ * (C) 2020 KYOCERA Corporation
+ */
+
 
 #include <linux/module.h>
 #include <linux/init.h>
@@ -32,6 +38,7 @@
 #include "inc/mt6370_pmu_fled.h"
 #include "inc/mt6370_pmu_charger.h"
 #include "inc/mt6370_pmu.h"
+#include <linux/of_gpio.h>
 
 #define MT6370_PMU_CHARGER_DRV_VERSION	"1.1.29_MTK"
 
@@ -70,6 +77,11 @@ enum mt6370_usbsw_state {
 	MT6370_USBSW_USB,
 };
 
+enum oem_otg_en {
+	OEM_OTG_EN_LOW = 0,
+	OEM_OTG_EN_HIGH = 1,
+};
+
 struct mt6370_pmu_charger_desc {
 	u32 ichg;
 	u32 aicr;
@@ -90,6 +102,7 @@ struct mt6370_pmu_charger_desc {
 	bool post_aicl;
 	const char *chg_dev_name;
 	const char *ls_dev_name;
+	u32 oem_otg_over_currnet_protection;
 };
 
 struct mt6370_pmu_charger_data {
@@ -128,6 +141,8 @@ struct mt6370_pmu_charger_data {
 	atomic_t bc12_cnt;
 	atomic_t bc12_wkard;
 	int tchg;
+	int oem_otg_en_gpio;
+	int oem_recharge_voltage;
 #ifdef CONFIG_TCPC_CLASS
 	atomic_t tcpc_usb_connected;
 #else
@@ -158,6 +173,7 @@ static struct mt6370_pmu_charger_desc mt6370_default_chg_desc = {
 	.post_aicl = true,
 	.chg_dev_name = "primary_chg",
 	.ls_dev_name = "primary_load_switch",
+	.oem_otg_over_currnet_protection = 700000,
 };
 
 
@@ -2108,6 +2124,10 @@ static int mt6370_set_otg_current_limit(struct charger_device *chg_dev, u32 uA)
 	struct mt6370_pmu_charger_data *chg_data =
 		dev_get_drvdata(&chg_dev->dev);
 
+	if(uA > chg_data->chg_desc->oem_otg_over_currnet_protection) {
+		uA = chg_data->chg_desc->oem_otg_over_currnet_protection;
+	}
+
 	reg_ilimit = mt6370_find_closest_reg_value_via_table(
 		mt6370_otg_oc_threshold,
 		ARRAY_SIZE(mt6370_otg_oc_threshold),
@@ -2131,6 +2151,7 @@ static int mt6370_enable_otg(struct charger_device *chg_dev, bool en)
 {
 	int ret = 0;
 	bool en_otg = false;
+	int oem_otg_en = OEM_OTG_EN_LOW;
 	struct mt6370_pmu_charger_data *chg_data =
 		dev_get_drvdata(&chg_dev->dev);
 	u8 hidden_val = en ? 0x00 : 0x0F;
@@ -2138,10 +2159,18 @@ static int mt6370_enable_otg(struct charger_device *chg_dev, bool en)
 
 	dev_info(chg_data->dev, "%s: en = %d\n", __func__, en);
 
+	if (en) {
+		oem_otg_en = OEM_OTG_EN_HIGH;
+	}
+	if (chg_data->oem_otg_en_gpio) {
+		pr_debug("set to etg_en_gpio:%d\n", oem_otg_en);
+		gpio_set_value(chg_data->oem_otg_en_gpio, oem_otg_en);
+	}
+
 	mt6370_enable_hidden_mode(chg_data, true);
 
-	/* Set OTG_OC to 500mA */
-	ret = mt6370_set_otg_current_limit(chg_dev, 500000);
+	/* Set OTG_OC */
+	ret = mt6370_set_otg_current_limit(chg_dev, chg_data->chg_desc->oem_otg_over_currnet_protection);
 	if (ret < 0) {
 		dev_err(chg_data->dev, "%s: set otg oc failed\n", __func__);
 		goto out;
@@ -3791,6 +3820,17 @@ static inline int mt_parse_dt(struct device *dev,
 	if (of_property_read_u32(np, "lbp_dt", &chg_desc->lbp_dt) < 0)
 		dev_err(chg_data->dev, "%s: no lbp_dt\n", __func__);
 
+	if (of_property_read_u32(np, "oem_otg_over_currnet_protection", &chg_desc->oem_otg_over_currnet_protection) < 0)
+		dev_err(chg_data->dev, "%s: no oem_otg_over_currnet_protection\n", __func__);
+
+	if (of_property_read_u32(np, "mt6370,otg_enable_gpio_num", &chg_data->oem_otg_en_gpio) < 0)
+		dev_err(chg_data->dev, "%s: no oem_otg_en_gpio\n", __func__);
+
+	if (of_property_read_u32(np, "oem_recharge_voltage", &chg_data->oem_recharge_voltage) < 0) {
+		dev_err(chg_data->dev, "%s: no oem_recharge_voltage\n", __func__);
+		chg_data->oem_recharge_voltage = -1;
+	}
+
 	chg_desc->en_te = of_property_read_bool(np, "enable_te");
 	chg_desc->en_wdt = of_property_read_bool(np, "enable_wdt");
 	chg_desc->en_polling = of_property_read_bool(np, "enable_polling");
@@ -3800,6 +3840,12 @@ static inline int mt_parse_dt(struct device *dev,
 	chg_desc->post_aicl = of_property_read_bool(np, "post_aicl");
 
 	chg_data->chg_desc = chg_desc;
+
+	chg_data->oem_otg_en_gpio = of_get_named_gpio(np, "mt6370,otg_enable_gpio_num", 0);
+	if (chg_data->oem_otg_en_gpio) {
+		pr_err("%s:oem_otg_en_gpio is %d\n", __func__, chg_data->oem_otg_en_gpio);
+		gpio_request(chg_data->oem_otg_en_gpio, "otg-en");
+	}
 
 	return 0;
 }
@@ -3959,6 +4005,42 @@ static int mt6370_chg_init_setting(struct mt6370_pmu_charger_data *chg_data)
 }
 
 
+static int mt6370_otg_init_setting(struct mt6370_pmu_charger_data *chg_data)
+{
+	int ret = 0;
+
+	ret = mt6370_pmu_reg_update_bits(chg_data->chip,
+			MT6370_PMU_REG_CHGCTRL5, 0xFC, 0x64);
+	if (ret < 0)
+		dev_err(chg_data->dev, "%s: VOBST init failed\n", __func__);
+
+	ret = mt6370_pmu_reg_update_bits(chg_data->chip,
+			MT6370_PMU_REG_CHGCTRL10, 0x7, 0x1);
+	if (ret < 0)
+		dev_err(chg_data->dev, "%s: OTG_OC init failed\n", __func__);
+
+	ret = mt6370_pmu_reg_update_bits(chg_data->chip,
+			MT6370_PMU_REG_CHGCTRL10, 0xF0, 0x50);
+	if (ret < 0)
+		dev_err(chg_data->dev, "%s: LSP init failed\n", __func__);
+
+	return ret;
+}
+
+static int mt6370_oem_set_vrech(struct mt6370_pmu_charger_data *chg_data, u32 reg_value)
+{
+	int ret = 0;
+
+	ret = mt6370_pmu_reg_update_bits(
+		chg_data->chip,
+		MT6370_PMU_REG_CHGCTRL11,
+		MT6370_MASK_VRECHG,
+		reg_value << MT6370_SHIFT_VRECHG
+	);
+
+	return ret;
+}
+
 static struct charger_ops mt6370_chg_ops = {
 	/* Normal charging */
 	.plug_out = mt6370_plug_out,
@@ -4071,13 +4153,17 @@ static ssize_t shipping_mode_store(struct device *dev,
 	}
 	mt6370_enable_hidden_mode(chg_data, false);
 	mdelay(50);
-	/* enter shipping mode */
+	/* enter shipping mode with 10s disable BATFET */
 	ret = mt6370_pmu_reg_set_bit(chg_data->chip,
-				     MT6370_PMU_REG_CHGCTRL2, 0x80);
+				     MT6370_PMU_REG_CHGCTRL2, 0xc0);
 	if (ret < 0) {
 		dev_notice(dev, "enter shipping mode\n");
 		return ret;
 	}
+	else
+		dev_notice(dev, "enter shipping mode done\n");
+	chg_data->chip->shipping_mode_en = true;
+
 	return count;
 }
 
@@ -4088,6 +4174,9 @@ static int mt6370_pmu_charger_probe(struct platform_device *pdev)
 	int ret = 0;
 	struct mt6370_pmu_charger_data *chg_data;
 	bool use_dt = pdev->dev.of_node;
+	int vrech_reg_value = -1;
+	int vrech_values[] = {100, 200, 300, 400};
+	int vrech_idx = 0;
 
 	pr_info("%s: (%s)\n", __func__, MT6370_PMU_CHARGER_DRV_VERSION);
 
@@ -4144,6 +4233,31 @@ static int mt6370_pmu_charger_probe(struct platform_device *pdev)
 	if (ret < 0) {
 		dev_err(chg_data->dev, "%s: sw init failed\n", __func__);
 		goto err_chg_init_setting;
+	}
+
+	/* Do initial OTG */
+	ret = mt6370_otg_init_setting(chg_data);
+	if (ret < 0) {
+		dev_err(chg_data->dev, "%s: sw otg init failed\n", __func__);
+		goto err_chg_init_setting;
+	}
+
+	/* Do initial VRECH */
+	if(chg_data->oem_recharge_voltage > 0) {
+		dev_notice(chg_data->dev, "%s: set %d to vrech\n", __func__, chg_data->oem_recharge_voltage);
+		for(vrech_idx = 0; vrech_idx < sizeof(vrech_values)/sizeof(vrech_values[0]); vrech_idx++) {
+			if(vrech_values[vrech_idx] == chg_data->oem_recharge_voltage) {
+				vrech_reg_value = vrech_idx;
+				break;
+			}
+		}
+		if(0 <= vrech_reg_value && vrech_reg_value < sizeof(vrech_values)/sizeof(vrech_values[0])) {
+			ret = mt6370_oem_set_vrech(chg_data, vrech_reg_value);
+			if (ret < 0) {
+				dev_err(chg_data->dev, "%s: mt6370_oem_set_vrech failed\n", __func__);
+				goto err_chg_init_setting;
+			}
+		}
 	}
 
 	/* SW workaround */

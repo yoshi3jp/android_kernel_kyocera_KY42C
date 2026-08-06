@@ -113,5 +113,6 @@ extern int mtk_chr_is_charger_exist(unsigned char *exist);
 extern bool is_power_path_supported(void);
 extern int charger_get_vbus(void);
 extern bool mt_charger_plugin(void);
-
+extern void oem_charger_check_conn(void);
+extern void oem_charger_clear_chglog(void);
 #endif /* __MTK_CHARGER_H__ */

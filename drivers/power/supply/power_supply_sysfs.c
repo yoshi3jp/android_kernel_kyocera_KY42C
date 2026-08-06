@@ -202,10 +202,20 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(scope),
 	POWER_SUPPLY_ATTR(charge_term_current),
 	POWER_SUPPLY_ATTR(calibrate),
+#ifdef CONFIG_USB_THERMAL
+	/* usb thermal */
+	POWER_SUPPLY_ATTR(usb_thermal),
+#endif
+	/* OEM added of type `int' */
+	POWER_SUPPLY_ATTR(batt_aging),
+	POWER_SUPPLY_ATTR(dock),
+	POWER_SUPPLY_ATTR(oem_charging_log),
+	POWER_SUPPLY_ATTR(charger_status),
 	/* Local extensions */
 	POWER_SUPPLY_ATTR(usb_hc),
 	POWER_SUPPLY_ATTR(usb_otg),
 	POWER_SUPPLY_ATTR(charge_enabled),
+	POWER_SUPPLY_ATTR(moisture_detected),
 	/* Local extensions of type int64_t */
 	POWER_SUPPLY_ATTR(charge_counter_ext),
 	/* Properties of type `const char *' */

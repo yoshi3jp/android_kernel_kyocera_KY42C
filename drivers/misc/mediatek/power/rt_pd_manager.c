@@ -10,6 +10,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2022 KYOCERA Corporation
+ */
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -22,6 +26,7 @@
 #include <linux/reboot.h>
 #include <linux/pm.h>
 #include <linux/cpumask.h>
+#include <linux/switch.h>
 
 #include "tcpm.h"
 
@@ -56,6 +61,8 @@ static unsigned char bc12_chr_type;
 static int vconn_gpio;
 static unsigned char vconn_on;
 #endif
+
+static struct switch_dev sdev;
 
 #if CONFIG_MTK_GAUGE_VERSION == 30
 static struct charger_device *primary_charger;
@@ -195,6 +202,8 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 		pr_info("%s sink vbus %dmv %dma type(%d)\n", __func__,
 			pd_sink_voltage_new, pd_sink_current_new, pd_sink_type);
 		mutex_unlock(&param_lock);
+
+		switch_set_state(&sdev, (int)pd_sink_type);
 
 		if ((pd_sink_voltage_new != pd_sink_voltage_old) ||
 		    (pd_sink_current_new != pd_sink_current_old)) {
@@ -386,12 +395,20 @@ static int rt_pd_manager_probe(struct platform_device *pdev)
 #endif /* CONFIG_MTK_PUMP_EXPRESS_PLUS_30_SUPPORT */
 #endif /* This part is for GM20 */
 
+	sdev.name = "usb_pd_change";
+	ret = switch_dev_register(&sdev);
+	if (unlikely(ret)) {
+		return ret;
+	}
+
 	pr_info("%s OK!!\n", __func__);
 	return ret;
 }
 
 static int rt_pd_manager_remove(struct platform_device *pdev)
 {
+	switch_dev_unregister(&sdev);
+
 	return 0;
 }
 

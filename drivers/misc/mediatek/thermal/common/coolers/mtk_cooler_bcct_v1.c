@@ -10,6 +10,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2019 KYOCERA Corporation
+ */
 
 #include <linux/version.h>
 #include <linux/kernel.h>
@@ -233,7 +237,7 @@ mtk_pep30_set_charging_current_limit(int cur)
 		pr_debug("[Thermal/TC/bcct]" fmt, ##args); \
 	}  while (0)
 
-#define MAX_NUM_INSTANCE_MTK_COOLER_BCCT  3
+#define MAX_NUM_INSTANCE_MTK_COOLER_BCCT  10
 
 #define MTK_CL_BCCT_GET_LIMIT(limit, state) \
 {(limit) = (short) (((unsigned long) (state))>>16); }
@@ -558,10 +562,17 @@ static int mtk_cooler_bcct_register_ltf(void)
 
 	chrlmt_register(&cl_bcct_chrlmt_handle);
 
-#if (MAX_NUM_INSTANCE_MTK_COOLER_BCCT == 3)
-	MTK_CL_BCCT_SET_LIMIT(1000, cl_bcct_state[0]);
-	MTK_CL_BCCT_SET_LIMIT(500, cl_bcct_state[1]);
-	MTK_CL_BCCT_SET_LIMIT(0, cl_bcct_state[2]);
+#if (MAX_NUM_INSTANCE_MTK_COOLER_BCCT == 10)
+	MTK_CL_BCCT_SET_LIMIT(1400, cl_bcct_state[0]);
+	MTK_CL_BCCT_SET_LIMIT(1200, cl_bcct_state[1]);
+	MTK_CL_BCCT_SET_LIMIT(1100, cl_bcct_state[2]);
+	MTK_CL_BCCT_SET_LIMIT(1000, cl_bcct_state[3]);
+	MTK_CL_BCCT_SET_LIMIT(900, cl_bcct_state[4]);
+	MTK_CL_BCCT_SET_LIMIT(800, cl_bcct_state[5]);
+	MTK_CL_BCCT_SET_LIMIT(700, cl_bcct_state[6]);
+	MTK_CL_BCCT_SET_LIMIT(600, cl_bcct_state[7]);
+	MTK_CL_BCCT_SET_LIMIT(500, cl_bcct_state[8]);
+	MTK_CL_BCCT_SET_LIMIT(50, cl_bcct_state[9]);
 #endif
 
 	for (i = MAX_NUM_INSTANCE_MTK_COOLER_BCCT; i-- > 0;) {
@@ -1086,7 +1097,7 @@ struct file *filp, const char __user *buf, size_t len, loff_t *data)
 {
 	/* int ret = 0; */
 	char tmp[128] = { 0 };
-	int klog_on, limit0, limit1, limit2;
+	int klog_on, limit0, limit1, limit2, limit3, limit4, limit5, limit6, limit7, limit8, limit9;
 
 	len = (len < (128 - 1)) ? len : (128 - 1);
 	/* write data to the buffer */
@@ -1108,13 +1119,21 @@ struct file *filp, const char __user *buf, size_t len, loff_t *data)
 	 * MTK_THERMAL_MONITOR_COOLER_MAX_EXTRA_CONDITIONS
 	 * is changed to other than 3
 	 */
-#if (MAX_NUM_INSTANCE_MTK_COOLER_BCCT == 3)
+#if (MAX_NUM_INSTANCE_MTK_COOLER_BCCT == 10)
 	MTK_CL_BCCT_SET_LIMIT(-1, cl_bcct_state[0]);
 	MTK_CL_BCCT_SET_LIMIT(-1, cl_bcct_state[1]);
 	MTK_CL_BCCT_SET_LIMIT(-1, cl_bcct_state[2]);
+	MTK_CL_BCCT_SET_LIMIT(-1, cl_bcct_state[3]);
+	MTK_CL_BCCT_SET_LIMIT(-1, cl_bcct_state[4]);
+	MTK_CL_BCCT_SET_LIMIT(-1, cl_bcct_state[5]);
+	MTK_CL_BCCT_SET_LIMIT(-1, cl_bcct_state[6]);
+	MTK_CL_BCCT_SET_LIMIT(-1, cl_bcct_state[7]);
+	MTK_CL_BCCT_SET_LIMIT(-1, cl_bcct_state[8]);
+	MTK_CL_BCCT_SET_LIMIT(-1, cl_bcct_state[9]);
 
 	if (sscanf(
-		tmp, "%d %d %d %d", &klog_on, &limit0, &limit1, &limit2) >= 1) {
+		tmp, "%d %d %d %d %d %d %d %d %d %d %d", &klog_on, &limit0, &limit1, &limit2, &limit3, &limit4,
+		                                             &limit5, &limit6, &limit7, &limit8, &limit9 ) >= 1) {
 		if (klog_on == 0 || klog_on == 1)
 			cl_bcct_klog_on = klog_on;
 
@@ -1124,6 +1143,20 @@ struct file *filp, const char __user *buf, size_t len, loff_t *data)
 			MTK_CL_BCCT_SET_LIMIT(limit1, cl_bcct_state[1]);
 		if (limit2 >= -1)
 			MTK_CL_BCCT_SET_LIMIT(limit2, cl_bcct_state[2]);
+		if (limit3 >= -1)
+			MTK_CL_BCCT_SET_LIMIT(limit3, cl_bcct_state[3]);
+		if (limit4 >= -1)
+			MTK_CL_BCCT_SET_LIMIT(limit4, cl_bcct_state[4]);
+		if (limit5 >= -1)
+			MTK_CL_BCCT_SET_LIMIT(limit5, cl_bcct_state[5]);
+		if (limit6 >= -1)
+			MTK_CL_BCCT_SET_LIMIT(limit6, cl_bcct_state[6]);
+		if (limit7 >= -1)
+			MTK_CL_BCCT_SET_LIMIT(limit7, cl_bcct_state[7]);
+		if (limit8 >= -1)
+			MTK_CL_BCCT_SET_LIMIT(limit8, cl_bcct_state[8]);
+		if (limit9 >= -1)
+			MTK_CL_BCCT_SET_LIMIT(limit9, cl_bcct_state[9]);
 
 		return len;
 	}

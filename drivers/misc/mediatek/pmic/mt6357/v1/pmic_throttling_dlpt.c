@@ -46,6 +46,8 @@
 #include <mach/mtk_battery_meter.h>
 #endif
 
+#include <mt-plat/mtk_boot.h>
+
 /*****************************************************************************
  * PMIC related define
  ******************************************************************************/
@@ -87,6 +89,8 @@ bool __attribute__ ((weak)) is_power_path_supported(void)
 	pr_notice_once("%s: check mtk_charger\n", __func__);
 	return 0;
 }
+
+static u32 g_LOW_TMP_IMIX = 81;
 
 /***************************************************************************
  * Low battery call back function
@@ -566,9 +570,16 @@ int bat_percent_notify_handler(void *unused)
 
 enum hrtimer_restart bat_percent_notify_task(struct hrtimer *timer)
 {
+	int boot_mode = 0;
+
+	boot_mode = get_boot_mode();
+
+	if (boot_mode != FACTORY_BOOT && boot_mode != ATE_FACTORY_BOOT)
+	{
 	bat_percent_notify_flag = true;
 	wake_up_interruptible(&bat_percent_notify_waiter);
 	PMICLOG("%s is called\n", __func__);
+	}
 
 	return HRTIMER_NORESTART;
 }
@@ -989,6 +1000,10 @@ int get_dlpt_imix(void)
 	int imix;
 	int i, count_do_ptim = 0;
 
+#if 1
+	int bat_tmp 	= battery_get_bat_temperature();
+#endif
+
 	for (i = 0; i < 5; i++) {
 		/*adc and fg---------------------------------------------- */
 		while (do_ptim(false)) {
@@ -1020,13 +1035,32 @@ int get_dlpt_imix(void)
 	curr_avg = curr[1] + curr[2] + curr[3];
 	volt_avg = volt_avg / 3;
 	curr_avg = curr_avg / 3;
+
+#if 1
+	if (bat_tmp > 0)
+	{
+		imix = (curr_avg + (volt_avg - g_lbatInt1) * 1000 / ptim_rac_val_avg)
+							/ 10;
+	}
+	else
+	{
+		imix = g_LOW_TMP_IMIX;
+	}
+#else
 	imix = (curr_avg + (volt_avg - g_lbatInt1) * 1000 / ptim_rac_val_avg)
 						/ 10;
+#endif
 
 #if (CONFIG_MTK_GAUGE_VERSION == 30)
+#if 1
+	pr_info("[%s] %d,%d,%d,%d,%d,%d,%d,%d\n", __func__,
+		volt_avg, curr_avg, g_lbatInt1, ptim_rac_val_avg, imix,
+		battery_get_soc(), battery_get_uisoc(), bat_tmp);
+#else
 	pr_info("[%s] %d,%d,%d,%d,%d,%d,%d\n", __func__,
 		volt_avg, curr_avg, g_lbatInt1, ptim_rac_val_avg, imix,
 		battery_get_soc(), battery_get_uisoc());
+#endif
 #else
 	pr_info("[%s] %d,%d,%d,%d,%d,NA,NA\n", __func__,
 		volt_avg, curr_avg, g_lbatInt1, ptim_rac_val_avg, imix);
@@ -1168,9 +1202,16 @@ int dlpt_notify_handler(void *unused)
 
 void dlpt_notify_task(unsigned long data)
 {
+	int boot_mode = 0;
+
+	boot_mode = get_boot_mode();
+
+	if (boot_mode != FACTORY_BOOT && boot_mode != ATE_FACTORY_BOOT)
+	{
 	dlpt_notify_flag = true;
 	wake_up_interruptible(&dlpt_notify_waiter);
 	PMICLOG("%s is called\n", __func__);
+	}
 }
 
 void dlpt_notify_init(void)
@@ -1907,6 +1948,7 @@ static int __init pmic_throttling_dlpt_rac_init(void)
 #ifdef DLPT_FEATURE_SUPPORT
 	const int *pimix = NULL;
 	int len = 0;
+	struct device_node *np;
 
 	if (of_scan_flat_dt(fb_early_init_dt_get_chosen, NULL) > 0)
 		pimix = of_get_flat_dt_prop(pmic_node, "atag,imix_r", &len);
@@ -1916,6 +1958,14 @@ static int __init pmic_throttling_dlpt_rac_init(void)
 		pr_info(" pimix = %d\n", *pimix);
 		ptim_rac_val_avg = *pimix;
 	}
+
+	np = of_find_node_by_name(NULL, "kc_dlpt");
+	if (np) {
+		if (of_property_read_u32(np, "oem,low_tmp_imix", &g_LOW_TMP_IMIX) < 0) {
+			pr_err("%s : failed read oem,low_tmp_imix", __func__);
+		}
+	}
+	pr_notice("%s : g_LOW_TMP_IMIX is %d\n", __func__, g_LOW_TMP_IMIX);
 
 	PMICLOG("******** MT pmic driver probe!! ********%d\n"
 		, ptim_rac_val_avg);

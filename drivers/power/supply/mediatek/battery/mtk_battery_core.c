@@ -88,6 +88,11 @@
 /* ============================================================ */
 struct mtk_battery gm;
 
+static int get_battery_aging(char *buffer, const struct kernel_param *kp) {
+	return sprintf(buffer, "%d\n", gm.aging_factor);
+}
+module_param_call(battery_aging, NULL, get_battery_aging, NULL, 0444);
+
 /* ============================================================ */
 /* gauge hal interface */
 /* ============================================================ */
@@ -982,6 +987,9 @@ void fg_custom_init_from_dts(struct platform_device *dev)
 	/* Aging Compensation 3*/
 	fg_read_dts_val(np, "AGING_THIRD_EN", &(fg_cust_data.aging_third_en),
 		1);
+	fg_read_dts_val(np, "AGING_4_EN", &(fg_cust_data.aging_4_en), 1);
+	fg_read_dts_val(np, "AGING_5_EN", &(fg_cust_data.aging_5_en), 1);
+	fg_read_dts_val(np, "AGING_6_EN", &(fg_cust_data.aging_6_en), 1);
 
 	/* ui_soc related */
 	fg_read_dts_val(np, "DIFF_SOC_SETTING",
@@ -1375,7 +1383,13 @@ void fg_custom_init_from_dts(struct platform_device *dev)
 			column = 3;
 	}
 
-		sprintf(node_name, "battery%d_profile_t%d", bat_id, i);
+		if (gm.oem_batt_care_mode_val) {
+			pr_info("Battery parameters for battery care mode\n");
+			sprintf(node_name, "battery%d_profile_care_mode_t%d", bat_id, i);
+		} else {
+			pr_info("battery parameters for normal operation\n");
+			sprintf(node_name, "battery%d_profile_t%d", bat_id, i);
+		}
 		fg_custom_parse_table(np, node_name,
 			fg_table_cust_data.fg_profile[i].fg_profile, column);
 	}
@@ -1571,7 +1585,10 @@ void sw_check_bat_plugout(void)
 	if (gm.disable_plug_int && gm.disableGM30 != true) {
 		is_bat_exist = pmic_is_battery_exist();
 		/* fg_bat_plugout_int_handler(); */
+
 		if (is_bat_exist == 0) {
+			return;
+
 			bm_err(
 				"[swcheck_bat_plugout]g_disable_plug_int=%d, is_bat_exist %d, is_fg_disable %d\n",
 				gm.disable_plug_int,
@@ -2117,6 +2134,13 @@ void fg_bat_plugout_int_handler_gm25(void)
 
 	if (fg_interrupt_check() == false)
 		return;
+
+ 	if (is_bat_exist == false) {
+		en_intr_VBATON_UNDET(0);
+		pr_info("%s: bat_exist: %d DISABLE bat_exist check\n",
+			__func__, is_bat_exist);
+		return;
+	}
 
 	if (is_bat_exist == false) {
 		gauge_dev_set_info(gm.gdev, GAUGE_BAT_PLUG_STATUS, 0);
@@ -3812,6 +3836,12 @@ void bmd_ctrl_cmd_from_user(void *nl_data, struct fgd_nl_msg_t *ret_msg)
 				daemon_ui_soc, gm.ui_soc,
 				gm.disableGM30, old_uisoc, diff.tv_sec);
 			gm.uisoc_oldtime = now_time;
+
+			if ( gm.ui_soc == 100 && battery_main.BAT_oem_full_flg == true )
+			{
+				battery_main.BAT_STATUS = POWER_SUPPLY_STATUS_FULL;
+				bm_err("[fg_res] KC_DEBUG BAT FULL %d\n",battery_main.BAT_CAPACITY);
+			}
 
 			battery_main.BAT_CAPACITY = gm.ui_soc;
 			battery_update(&battery_main);

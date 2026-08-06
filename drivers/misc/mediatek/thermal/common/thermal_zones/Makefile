@@ -312,6 +312,11 @@ else
 obj-$(CONFIG_THERMAL) += mtk_ts_charger.o
 endif
 obj-$(CONFIG_THERMAL) += mtk_ts_charger2.o
+ifneq ($(CONFIG_USB_THERMAL),)
+obj-$(CONFIG_THERMAL) += mtk_ts_usb_ntc.o
+endif
+obj-$(CONFIG_THERMAL) += mtk_ts_cam_ntc.o
+obj-$(CONFIG_THERMAL) += mtk_ts_lcd_ntc.o
 
 
 ifneq ($(CONFIG_MTK_COMBO_WIFI),)
@@ -351,6 +356,11 @@ obj-$(CONFIG_THERMAL) += mtk_ts_charger.o
 endif
 obj-$(CONFIG_THERMAL) += mtk_ts_charger2.o
 
+ifneq ($(CONFIG_USB_THERMAL),)
+obj-$(CONFIG_THERMAL) += mtk_ts_usb_ntc.o
+endif
+obj-$(CONFIG_THERMAL) += mtk_ts_cam_ntc.o
+obj-$(CONFIG_THERMAL) += mtk_ts_lcd_ntc.o
 
 ifneq ($(CONFIG_MTK_COMBO_WIFI),)
     obj-$(CONFIG_THERMAL) += mtk_ts_wmt.o

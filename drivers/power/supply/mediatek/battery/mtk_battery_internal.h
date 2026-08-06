@@ -605,6 +605,15 @@ struct battery_data {
 	/* Add for Battery Service */
 	int BAT_batt_vol;
 	int BAT_batt_temp;
+
+	/* oem add */
+	bool BAT_oem_full_flg;
+	int BAT_oem_chg_log;
+	int BAT_oem_charger_status;
+	int BAT_oem_deterioration_thresh_good;
+	int BAT_oem_deterioration_thresh_norm;
+	int BAT_oem_deterioration_thresh_normtogood;
+	int BAT_oem_deterioration_thresh_deadtonorm;
 };
 
 struct BAT_EC_Struct {
@@ -845,6 +854,9 @@ struct mtk_battery {
 	struct battery_temperature_table rbat;
 
 	struct fgd_cmd_param_t_custom fg_data;
+
+	/* oem add */
+	int oem_batt_care_mode_val;
 };
 
 
