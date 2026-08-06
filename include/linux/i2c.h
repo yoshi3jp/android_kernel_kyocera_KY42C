@@ -20,6 +20,10 @@
     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
     MA 02110-1301 USA.							     */
 /* ------------------------------------------------------------------------- */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2022 KYOCERA Corporation
+ */
 
 /* With some changes from Kyösti Mälkki <kmalkki@cc.hut.fi> and
    Frodo Looijaard <frodol@dds.nl> */
@@ -138,6 +142,8 @@ enum i2c_alert_protocol {
  * @probe: Callback for device binding
  * @remove: Callback for device unbinding
  * @shutdown: Callback for device shutdown
+ * @suspend: Callback for device suspend
+ * @resume: Callback for device resume
  * @alert: Alert callback, for example for the SMBus alert protocol
  * @command: Callback for bus-wide signaling (optional)
  * @driver: Device driver model driver
@@ -180,6 +186,8 @@ struct i2c_driver {
 
 	/* driver model interfaces that don't relate to enumeration  */
 	void (*shutdown)(struct i2c_client *);
+	int (*suspend)(struct i2c_client *, pm_message_t mesg);
+	int (*resume)(struct i2c_client *);
 
 	/* Alert callback, for example for the SMBus alert protocol.
 	 * The format and meaning of the data value depends on the protocol.

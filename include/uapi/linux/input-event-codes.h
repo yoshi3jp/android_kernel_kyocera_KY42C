@@ -336,6 +336,8 @@
 
 #define KEY_MICMUTE		248	/* Mute / unmute the microphone */
 
+#define KEY_SIDE		254
+
 /* Code 255 is reserved for special needs of AT keyboard driver */
 
 #define BTN_MISC		0x100
@@ -684,6 +686,11 @@
 #define BTN_TRIGGER_HAPPY39		0x2e6
 #define BTN_TRIGGER_HAPPY40		0x2e7
 
+#define KEY_KC_SOS				0x2fb
+#define KEY_KC_TOP_END			0x2fc
+#define KEY_KC_TOP_SPK			0x2fd
+#define KEY_KC_PTT				0x2fe
+
 /* We avoid low common keys in module aliases so they don't get huge. */
 #define KEY_MIN_INTERESTING	KEY_MUTE
 #define KEY_MAX			0x2ff
@@ -790,7 +797,8 @@
 #define SW_LINEIN_INSERT	0x0d  /* set = inserted */
 #define SW_MUTE_DEVICE		0x0e  /* set = device disabled */
 #define SW_PEN_INSERTED		0x0f  /* set = pen inserted */
-#define SW_MAX			0x0f
+#define SW_BUZZER			0x1e
+#define SW_MAX			0x20
 #define SW_CNT			(SW_MAX+1)
 
 /*

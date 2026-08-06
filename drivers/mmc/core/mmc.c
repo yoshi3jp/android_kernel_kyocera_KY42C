@@ -34,6 +34,8 @@
 #define DEFAULT_CMD6_TIMEOUT_MS	500
 #define MIN_CACHE_EN_TIMEOUT_MS 1600
 
+unsigned long mmc_log = 0; /* Debug Console Flag OFF:0 ON:Other */
+
 static const unsigned int tran_exp[] = {
 	10000,		100000,		1000000,	10000000,
 	0,		0,		0,		0
@@ -564,7 +566,7 @@ static int mmc_decode_ext_csd(struct mmc_card *card, u8 *ext_csd)
 			card->ext_csd.raw_bkops_status =
 				ext_csd[EXT_CSD_BKOPS_STATUS];
 			if (!card->ext_csd.man_bkops_en)
-				pr_debug("%s: MAN_BKOPS_EN bit is not set\n",
+				pr_notice("%s: MAN_BKOPS_EN bit is not set\n",
 					mmc_hostname(card->host));
 		}
 
@@ -647,7 +649,7 @@ static int mmc_decode_ext_csd(struct mmc_card *card, u8 *ext_csd)
 	if (card->ext_csd.rev >= 7) {
 		if ((ext_csd[EXT_CSD_BKOPS_SUPPORT] & 0x1) &&
 		    !card->ext_csd.man_bkops_en) {
-			card->ext_csd.auto_bkops = 1;
+			card->ext_csd.auto_bkops = 0;
 			card->ext_csd.auto_bkops_en =
 				!!(ext_csd[EXT_CSD_BKOPS_EN] &
 				EXT_CSD_AUTO_BKOPS_MASK);
@@ -658,6 +660,9 @@ static int mmc_decode_ext_csd(struct mmc_card *card, u8 *ext_csd)
 
 		memcpy(card->ext_csd.fwrev, &ext_csd[EXT_CSD_FIRMWARE_VERSION],
 		       MMC_FIRMWARE_LEN);
+		pr_notice("%s: eMMC FW version : 0x%02x\n",
+				mmc_hostname(card->host),
+				ext_csd[EXT_CSD_FIRMWARE_VERSION]);
 		card->ext_csd.ffu_capable =
 			(ext_csd[EXT_CSD_SUPPORTED_MODE] & 0x1) &&
 			!(ext_csd[EXT_CSD_FW_CONFIG] & 0x1);
@@ -688,6 +693,11 @@ static int mmc_decode_ext_csd(struct mmc_card *card, u8 *ext_csd)
 				 card->ext_csd.cmdq_depth);
 		}
 	}
+#else
+
+	pr_notice("%s: Command Queue not supported\n",
+			mmc_hostname(card->host));
+
 #endif
 
 out:
@@ -875,6 +885,17 @@ static ssize_t mmc_dsr_show(struct device *dev,
 
 static DEVICE_ATTR(dsr, S_IRUGO, mmc_dsr_show, NULL);
 
+static ssize_t mmc_log_show (struct device *dev, struct device_attribute *attr, char *buf) {
+		return sprintf(buf, "%ld\n", mmc_log);
+}
+
+static ssize_t mmc_log_store (struct device *dev, struct device_attribute *attr, const char *buf, size_t len) {
+		mmc_log = simple_strtoul(buf, NULL, 0);
+		return len;
+}
+
+DEVICE_ATTR(mmc_log, S_IRUGO|S_IWUSR, mmc_log_show, mmc_log_store);
+
 static struct attribute *mmc_std_attrs[] = {
 	&dev_attr_cid.attr,
 	&dev_attr_csd.attr,
@@ -899,6 +920,7 @@ static struct attribute *mmc_std_attrs[] = {
 	&dev_attr_rel_sectors.attr,
 	&dev_attr_ocr.attr,
 	&dev_attr_dsr.attr,
+	&dev_attr_mmc_log.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(mmc_std);
@@ -1938,7 +1960,7 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 			card->ext_csd.cache_ctrl = 0;
 			err = 0;
 		} else {
-			card->ext_csd.cache_ctrl = 1;
+			card->ext_csd.cache_ctrl = 0;
 		}
 	}
 

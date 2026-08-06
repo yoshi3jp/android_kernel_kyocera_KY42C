@@ -1,4 +1,9 @@
 #
+# This software is contributed or developed by KYOCERA Corporation.
+# (C) 2022 KYOCERA Corporation
+#
+
+#
 # Makefile for misc devices that really don't fit anywhere else.
 #
 
@@ -58,6 +63,9 @@ obj-$(CONFIG_UID_SYS_STATS)	+= uid_sys_stats.o
 obj-$(CONFIG_MEMORY_STATE_TIME)	+= memory_state_time.o
 obj-$(CONFIG_ARCH_MEDIATEK) += mediatek/
 obj-$(CONFIG_MEDIATEK_SOLUTION) += mediatek/
+obj-$(CONFIG_TI_VIBRATOR)	+= drv2604-vibrator.o
+obj-$(CONFIG_USB_EXT_TYPE_C_PERICOM)	+= type-c-pericom.o
+obj-$(CONFIG_KC_USB_SWIC)	+= swic/
 lkdtm-$(CONFIG_LKDTM)		+= lkdtm_core.o
 lkdtm-$(CONFIG_LKDTM)		+= lkdtm_bugs.o
 lkdtm-$(CONFIG_LKDTM)		+= lkdtm_heap.o

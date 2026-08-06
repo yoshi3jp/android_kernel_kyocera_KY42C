@@ -3,6 +3,10 @@
 
 #include <linux/kgdb.h>
 #include <uapi/linux/fb.h>
+//KCDISP_CUST +
+#include <uapi/linux/kcdisp_uapi.h>
+#include <linux/kdisp.h>
+//KCDISP_CUST -
 
 #define FBIO_CURSOR            _IOWR('F', 0x08, struct fb_cursor_user)
 
@@ -522,6 +526,10 @@ struct fb_info {
 	} *apertures;
 
 	bool skip_vt_switch; /* no VT switch on suspend/resume required */
+#ifdef KCDISP_CUST
+	int kdisp_disp_type; /* 0:MainDisplay 1:SubDisplay*/
+#endif /* KCDISP_CUST */
+
 };
 
 static inline struct apertures_struct *alloc_apertures(unsigned int max_num) {

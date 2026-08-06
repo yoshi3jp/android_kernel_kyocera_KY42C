@@ -34,10 +34,18 @@ static irqreturn_t mmc_gpio_cd_irqt(int irq, void *dev_id)
 {
 	/* Schedule a card detection after a debounce timeout */
 	struct mmc_host *host = dev_id;
+	struct mmc_gpio *ctx;
 
 	host->trigger_card_event = true;
 	mmc_detect_change(host, msecs_to_jiffies(200));
 
+	ctx = host->slot.handler_priv;
+	if (ctx && ctx->cd_gpio) {
+		pr_notice("%s: slot status change detected (%d), GPIO_ACTIVE_%s\n",
+		mmc_hostname(host), gpiod_get_value_cansleep(ctx->cd_gpio),
+		(host->caps2 & MMC_CAP2_CD_ACTIVE_HIGH) ?
+		"HIGH" : "LOW");
+	}
 	return IRQ_HANDLED;
 }
 

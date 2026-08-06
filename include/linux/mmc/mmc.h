@@ -481,4 +481,12 @@ struct _mmc_csd {
 
 #define mmc_driver_type_mask(n)		(1 << (n))
 
+#define SDC_SDCARD_LOG_EMMC         (1 << 0)
+#define SDC_SDCARD_LOG_SD           (1 << 1)
+#define SDC_SDCARD_LOG_MASK         0x1F
+#define SDC_SDCARD_LOG(k)           ((mmc_log & SDC_SDCARD_LOG_MASK) & k)
+extern unsigned long mmc_log;
+
+
+
 #endif /* LINUX_MMC_MMC_H */

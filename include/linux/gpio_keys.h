@@ -1,5 +1,16 @@
 #ifndef _GPIO_KEYS_H
 #define _GPIO_KEYS_H
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ * (C) 2013 KYOCERA Corporation
+ * (C) 2014 KYOCERA Corporation
+ * (C) 2015 KYOCERA Corporation
+ * (C) 2016 KYOCERA Corporation
+ * (C) 2017 KYOCERA Corporation
+ * (C) 2018 KYOCERA Corporation
+ * (C) 2019 KYOCERA Corporation
+ */
 
 struct device;
 struct gpio_desc;
@@ -32,6 +43,10 @@ struct gpio_keys_button {
 	int value;
 	unsigned int irq;
 	struct gpio_desc *gpiod;
+	unsigned int on_chattering_num;
+	unsigned int off_chattering_num;
+	unsigned int on_cnt;
+	unsigned int off_cnt;
 };
 
 /**
@@ -54,5 +69,7 @@ struct gpio_keys_platform_data {
 	void (*disable)(struct device *dev);
 	const char *name;
 };
+
+extern bool gpio_keys_is_stateon(unsigned int code);
 
 #endif

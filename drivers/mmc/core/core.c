@@ -1029,9 +1029,12 @@ void mmc_request_done(struct mmc_host *host, struct mmc_request *mrq)
 			cmd->resp[2], cmd->resp[3]);
 
 		if (mrq->data) {
-			pr_debug("%s:     %d bytes transferred: %d\n",
-				mmc_hostname(host),
-				mrq->data->bytes_xfered, mrq->data->error);
+			if (( host->index == 0 && mrq->stop && SDC_SDCARD_LOG(SDC_SDCARD_LOG_EMMC)) ||
+				( host->index == 1 && mrq->stop && SDC_SDCARD_LOG(SDC_SDCARD_LOG_SD))){
+				pr_notice("%s:     %d bytes transferred: %d\n",
+						mmc_hostname(host),
+						mrq->data->bytes_xfered, mrq->data->error);
+			}
 #ifdef CONFIG_BLOCK
 			if (mrq->lat_hist_enabled) {
 				ktime_t completion;
@@ -1118,9 +1121,12 @@ static int mmc_start_request(struct mmc_host *host, struct mmc_request *mrq)
 		return -ENOMEDIUM;
 
 	if (mrq->sbc) {
-		pr_debug("<%s: starting CMD%u arg %08x flags %08x>\n",
-			 mmc_hostname(host), mrq->sbc->opcode,
-			 mrq->sbc->arg, mrq->sbc->flags);
+		if (( host->index == 0 && mrq->stop && SDC_SDCARD_LOG(SDC_SDCARD_LOG_EMMC)) ||
+			( host->index == 1 && mrq->stop && SDC_SDCARD_LOG(SDC_SDCARD_LOG_SD))){
+				pr_notice("<%s: starting CMD%u arg %08x flags %08x>\n",
+					 mmc_hostname(host), mrq->sbc->opcode,
+					 mrq->sbc->arg, mrq->sbc->flags);
+		}
 	}
 
 	pr_debug("%s: starting CMD%u arg %08x flags %08x\n",

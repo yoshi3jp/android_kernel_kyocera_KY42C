@@ -45,6 +45,8 @@ struct mmc_csd {
 				write_partial:1,
 				write_misalign:1,
 				dsr_imp:1;
+	unsigned int		perm_write_protect;
+	unsigned int		tmp_write_protect;
 };
 
 struct mmc_ext_csd {
