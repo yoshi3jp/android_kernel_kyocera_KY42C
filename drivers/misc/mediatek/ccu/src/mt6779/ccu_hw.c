@@ -433,7 +433,7 @@ out:
 
 int ccu_uninit_hw(struct ccu_device_s *device)
 {
-	ccu_i2c_free_dma_buf_mva_all();
+	ccu_i2c_free_dma_buf_mva_all(device);
 	device->i2c_dma_mva = 0;
 	if (enque_task) {
 		kthread_stop(enque_task);
@@ -683,7 +683,7 @@ CCU_PWDN_SKIP_STAT_CHK:
 	ccu_irq_disable();
 	ccu_clock_disable();
 	ccu_i2c_controller_uninit_all();
-	ccu_i2c_free_dma_buf_mva_all();
+	ccu_i2c_free_dma_buf_mva_all(ccu_dev);
 	ccu_dev->i2c_dma_mva = 0;
 	ccuInfo.IsCcuPoweredOn = 0;
 
@@ -891,7 +891,14 @@ int ccu_flushLog(int argc, int *argv)
 
 int ccu_read_info_reg(int regNo)
 {
-	int *offset = (int *)(uintptr_t)(ccu_base + 0x60 + regNo * 4);
+	int *offset;
+
+	if (regNo < 0 || regNo >= 32) {
+		LOG_ERR("invalid regNo");
+		return 0;
+	}
+
+	offset = (int *)(uintptr_t)(ccu_base + 0x60 + regNo * 4);
 
 	LOG_DBG("ccu_read_info_reg: %x\n", (unsigned int)(*offset));
 

@@ -55,6 +55,7 @@
 #define KDIMGSENSOR_DUAL_MASK_LSB 0x0000FFFF
 
 #define KDIMGSENSOR_NOSENSOR    "non_sensor"
+#define OV_EEPROM_MAX_SIZE 0x788
 #ifdef MTK_SUB2_IMGSENSOR
 #define KDIMGSENSOR_MAX_INVOKE_DRIVERS  (3)
 #define KDIMGSENSOR_INVOKE_DRIVER_0     (0)
@@ -1435,4 +1436,20 @@ struct IMGSENSOR_AE_FRM_MODE {
 	MUINT32 frame_mode_4:4;
 };
 
+enum OP_FLAGS_OV {
+       OV_SENSOR_I2C_DEFAULT = 0,
+       OV_SENSOR_I2C_READ,
+       OV_SENSOR_I2C_WRITE,
+       OV_SENSOR_EEPROM_LOAD,
+};
+struct FAC_CTX_OV {
+       enum OP_FLAGS_OV flag;
+       int size;
+       unsigned int addr;
+       unsigned short data;
+};
+struct FAC_DATA_OV{
+       int size;
+       unsigned short data[OV_EEPROM_MAX_SIZE];
+};
 #endif              /* _KD_IMGSENSOR_DATA_H */

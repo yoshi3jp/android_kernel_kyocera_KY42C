@@ -36,7 +36,13 @@
 #include <linux/compat.h>
 #endif
 
+struct FAC_ov08d10_data {
+	int FAC_index;
+	unsigned short data[0x788];
+};
 
+struct FAC_ov08d10_data FAC_data;
+struct FAC_DATA_OV_EEPROM FAC_data_ov;
 
 #define CAM_CAL_DRV_NAME "CAM_CAL_DRV"
 #define CAM_CAL_DEV_MAJOR_NUMBER 226
@@ -85,13 +91,19 @@ static int EEPROM_set_i2c_bus(unsigned int deviceID,
 			      struct stCAM_CAL_CMD_INFO_STRUCT *cmdInfo)
 {
 	enum IMGSENSOR_SENSOR_IDX idx;
+	enum EEPROM_I2C_DEV_IDX i2c_idx;
 	struct i2c_client *client;
 
 	idx = IMGSENSOR_SENSOR_IDX_MAP(deviceID);
+	i2c_idx = get_i2c_dev_sel(idx);
+
 	if (idx == IMGSENSOR_SENSOR_IDX_NONE)
 		return -EFAULT;
 
-	client = g_pstI2Cclients[get_i2c_dev_sel(idx)];
+	if (i2c_idx < I2C_DEV_IDX_1 || i2c_idx >= I2C_DEV_IDX_MAX)
+		return -EFAULT;
+
+	client = g_pstI2Cclients[i2c_idx];
 	pr_debug("%s end! deviceID=%d index=%u client=%p\n",
 		 __func__, deviceID, idx, client);
 
@@ -207,7 +219,7 @@ static int EEPROM_HW_i2c_probe
 #endif
 
 	/* Default EEPROM Slave Address Main= 0xa0 */
-	g_pstI2Cclients[I2C_DEV_IDX_1]->addr = 0x50;
+	g_pstI2Cclients[I2C_DEV_IDX_1]->addr = 0xAA;
 	spin_unlock(&g_spinLock);
 
 	return 0;
@@ -533,9 +545,11 @@ static long EEPROM_drv_ioctl(struct file *file,
 #endif
 {
 
+	int i;
 	int i4RetValue = 0;
 	u8 *pBuff = NULL;
 	u8 *pu1Params = NULL;
+	u8 *pu2Params = NULL;
 	/*u8 *tempP = NULL; */
 	struct stCAM_CAL_INFO_STRUCT *ptempbuf = NULL;
 	struct stCAM_CAL_CMD_INFO_STRUCT *pcmdInf = NULL;
@@ -572,10 +586,16 @@ static long EEPROM_drv_ioctl(struct file *file,
 		}
 
 		pu1Params = kmalloc(ptempbuf->u4Length, GFP_KERNEL);
+		pu2Params = kmalloc(0x788, GFP_KERNEL);
 
 		if (pu1Params == NULL) {
 			kfree(pBuff);
 			pr_debug("ioctl allocate pu1Params mem failed\n");
+			return -ENOMEM;
+		}
+		if (pu2Params == NULL) {
+			kfree(pBuff);
+			pr_debug("ioctl allocate pu2Params mem failed\n");
 			return -ENOMEM;
 		}
 
@@ -688,18 +708,25 @@ static long EEPROM_drv_ioctl(struct file *file,
 		}
 
 		if (pcmdInf != NULL) {
-			if (pcmdInf->readCMDFunc != NULL)
+			if (pcmdInf->readCMDFunc != NULL){
 				i4RetValue =
 					pcmdInf->readCMDFunc(pcmdInf->client,
 							  ptempbuf->u4Offset,
 							  pu1Params,
 							  ptempbuf->u4Length);
+			}
 			else {
 				pr_debug("pcmdInf->readCMDFunc == NULL\n");
 				kfree(pBuff);
 				kfree(pu1Params);
 				return -EFAULT;
 			}
+		}
+		if(ptempbuf->deviceID == 0x1 && FAC_data.FAC_index == 0){
+				pcmdInf->readCMDFunc(pcmdInf->client,
+						  0x0,
+						  pu2Params,
+						  0x788);
 		}
 #ifdef CAM_CALGETDLT_DEBUG
 		do_gettimeofday(&ktv2);
@@ -730,8 +757,16 @@ static long EEPROM_drv_ioctl(struct file *file,
 		}
 	}
 
+	if(ptempbuf->deviceID == 0x1 && FAC_data.FAC_index == 0){
+		for(i = 0; i < 0x788 ;i ++){
+			FAC_data.data[i] = *(pu2Params + i);
+		}
+		FAC_data.FAC_index = 1;
+	}
+
 	kfree(pBuff);
 	kfree(pu1Params);
+	kfree(pu2Params);
 	return i4RetValue;
 }
 
@@ -845,6 +880,68 @@ static void EEPROM_chrdev_unregister(void)
  *
  ***********************************************/
 
+//Fac read/write
+
+ssize_t ov_eeprom_store(struct kobject *kobj,struct kobj_attribute *attr,const char *ubuf,size_t count)
+{
+	int i;
+	struct FAC_CTX_OV08D10 *fac_ctx = (struct FAC_CTX_OV08D10 *)ubuf;
+
+	FAC_data_ov.size = fac_ctx->size;
+
+	if(fac_ctx->flag == OV08D10_SENSOR_EEPROM_LOAD){
+		for(i = 0 ; i < fac_ctx->size ; i++){
+			FAC_data_ov.data[i] = FAC_data.data[fac_ctx->addr + i];
+		}
+	} else {
+		return -1;
+	}
+
+	return sizeof(struct FAC_CTX_OV08D10);
+}
+
+ssize_t ov_eeprom_show(struct kobject *kobj,struct kobj_attribute *attr,char *ubuf)
+{
+	if(FAC_data_ov.size == 0)
+		return -1;
+
+	memcpy(ubuf,&FAC_data_ov,sizeof(struct FAC_DATA_OV_EEPROM));
+
+	FAC_data_ov.size = 0;
+	return sizeof(struct FAC_DATA_OV_EEPROM);
+//	return 4;
+}
+
+struct kobj_attribute kobj_attr_ov_eeprom = __ATTR(eeprom,0664,ov_eeprom_show,ov_eeprom_store);
+
+struct attribute *OV_eeprom_attr[] = {
+	&kobj_attr_ov_eeprom.attr,
+	NULL,
+};
+
+struct attribute_group OV_eeprom_attr_grp[] = {
+	{
+		.name = "fac_eeprom",
+		.attrs = OV_eeprom_attr,
+	},
+	{},
+};
+
+static void Fac_Eeprom_create(void)
+{
+	int ret;
+	struct kobject *OV_eeprom_kobj = NULL;
+
+	OV_eeprom_kobj = kobject_create_and_add("Fac_Eeprom",NULL);
+	if(OV_eeprom_kobj == NULL)
+		return;
+	ret = sysfs_create_group(OV_eeprom_kobj,&OV_eeprom_attr_grp[0]);
+	if(ret)
+		kobject_put(OV_eeprom_kobj);
+
+}
+//Fac read/write
+
 static int __init EEPROM_drv_init(void)
 {
 	pr_debug("%s Start!\n", __func__);
@@ -861,6 +958,10 @@ static int __init EEPROM_drv_init(void)
 
 	EEPROM_chrdev_register();
 
+//Fac read/write
+	Fac_Eeprom_create();
+//Fac read/write
+//
 	pr_debug("%s End!\n", __func__);
 	return 0;
 }

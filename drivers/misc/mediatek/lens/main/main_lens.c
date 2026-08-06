@@ -305,7 +305,7 @@ void AF_PowerDown(void)
 #endif
 
 #ifdef CONFIG_MACH_MT6761
-		DW9718SAF_PowerDown(g_pstAF_I2Cclient, &g_s4AF_Opened);
+		//DW9714AF_PowerDown(g_pstAF_I2Cclient, &g_s4AF_Opened);
 #endif
 	}
 	MAIN2AF_PowerDown();

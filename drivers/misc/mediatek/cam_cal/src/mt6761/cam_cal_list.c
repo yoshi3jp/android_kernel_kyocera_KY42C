@@ -33,6 +33,7 @@ struct stCAM_CAL_LIST_STRUCT g_camCalList[] = {
 	/*B+B*/
 	{S5K2P7_SENSOR_ID, 0xA0, Common_read_region},
 	{OV8856_SENSOR_ID, 0xA0, Common_read_region},
+	{OV08D10_SENSOR_ID, 0xAA, Common_read_region},
 	/*61*/
 	{IMX499_SENSOR_ID, 0xA0, Common_read_region},
 	{S5K3L8_SENSOR_ID, 0xA0, Common_read_region},

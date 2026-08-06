@@ -45,4 +45,25 @@ struct COMPAT_stCAM_CAL_INFO_STRUCT {
 };
 #endif
 
+#define OV08D10_EEPROM_MAX_SIZE 0x788
+
+enum OP_FLAGS_OV08D10 {
+	OV08D10_SENSOR_I2C_DEFAULT = 0,
+	OV08D10_SENSOR_I2C_READ,
+	OV08D10_SENSOR_I2C_WRITE,
+	OV08D10_SENSOR_EEPROM_LOAD,
+};
+
+struct FAC_CTX_OV08D10 {
+	enum OP_FLAGS_OV08D10 flag;
+	int size;
+	unsigned int addr;
+	unsigned short data;
+};
+
+struct FAC_DATA_OV_EEPROM {
+	int size;
+	unsigned short data[OV08D10_EEPROM_MAX_SIZE];
+};
+
 #endif/*_CAM_CAL_DATA_H*/

@@ -25,6 +25,8 @@ struct GPIO_PINCTRL gpio_pinctrl_list_cam[GPIO_CTRL_STATE_MAX_NUM_CAM] = {
 	{"vcamd_off"},
 	{"vcamio_on"},
 	{"vcamio_off"},
+	{"iic_iic"},
+	{"iic_gpio"},
 };
 
 #ifdef MIPI_SWITCH
