@@ -345,7 +345,7 @@ static struct port_t md3_ccci_ports[] = {
 		CCIF_HIF_ID, PORT_F_WITH_CHAR_NODE,
 		&char_port_ops, 2, "ccci3_md_log_ctrl",},
 	{CCCI_FS_TX, CCCI_FS_RX, 4, 4, 4, 4, CCIF_HIF_ID,
-		PORT_F_USER_HEADER | PORT_F_WITH_CHAR_NODE,
+		PORT_F_USER_HEADER | PORT_F_WITH_CHAR_NODE | PORT_F_CLEAN,
 		&char_port_ops, 4, "ccci3_fs",},
 	{CCCI_IPC_UART_TX, CCCI_IPC_UART_RX, 6, 6, 0xFF, 0xFF,
 		CCIF_HIF_ID, PORT_F_WITH_CHAR_NODE,
