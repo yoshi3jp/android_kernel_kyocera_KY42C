@@ -1,4 +1,8 @@
 /*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2022 KYOCERA Corporation
+ */
+/*
  * Copyright (C) 2017 MediaTek Inc.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -54,6 +58,11 @@
 #define MD_KEY	(0x02)
 #define DW_KEY	(0x04)
 #define AS_KEY	(0x08)
+/* FLARE A AUD_20_0017 Start */
+#ifdef CONFIG_KYOCERA_MSND
+#define PTT_KEY	(0x10)
+#endif
+/* FLARE A AUD_20_0017 End */
 
 #define HEADSET_MODE_1	(1)
 #define HEADSET_MODE_2	(2)
@@ -130,6 +139,8 @@ struct head_dts_data {
 	struct pwm_deb_settings pwm_deb;
 	struct three_key_threshold three_key;
 	struct four_key_threshold four_key;
+	/* EINT comparator threshold voltage: 0,2.0V; 1,2.4V */
+	unsigned int eint_comp_thresh;
 };
 
 enum {

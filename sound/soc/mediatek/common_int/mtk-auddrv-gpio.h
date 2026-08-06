@@ -14,6 +14,10 @@
  * along with this program.
  * If not, see <http://www.gnu.org/licenses/>.
  */
+/*
+ This software is contributed or developed by KYOCERA Corporation.
+ (C) 2022 KYOCERA Corporation
+ */
 
 /*******************************************************************************
  *
@@ -76,6 +80,7 @@ int AudDrv_GPIO_I2S_Select(int bEnable);
 int AudDrv_GPIO_EXTAMP_Select(int bEnable, int mode);
 int AudDrv_GPIO_EXTAMP2_Select(int bEnable, int mode);
 int AudDrv_GPIO_RCVSPK_Select(int bEnable);
+int AudDrv_GPIO_SPK_Select(int bEnable);
 int AudDrv_GPIO_HPDEPOP_Select(int bEnable);
 
 int audio_drv_gpio_aud_clk_pull(bool high);

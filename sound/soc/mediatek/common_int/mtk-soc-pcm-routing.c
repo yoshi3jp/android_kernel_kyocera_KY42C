@@ -1,4 +1,8 @@
 /*
+   This software is contributed or developed by KYOCERA Corporation.
+   (C) 2022 KYOCERA Corporation
+*/
+/*
  * Copyright (C) 2015 MediaTek Inc.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -110,6 +114,12 @@ static bool mEnableSideToneFilter;
 static const char *const ENABLESTF[] = {"Off", "On"};
 static int stf_gain;
 static int stf_positive_gain_db;
+/* FLARE_A Start AUD_20_0012 */
+#ifdef CONFIG_KYOCERA_MSND//add Audio_SineGen_Freq_Div_Chx control
+static int freq_div_ch1;
+static int freq_div_ch2;
+#endif
+/* FLARE_A End AUD_20_0012 */
 
 static int mAudio_Mode;
 static const char *const ANDROID_AUDIO_MODE[] = {
@@ -423,7 +433,57 @@ static int Audio_SineGen_Amplitude_Set(struct snd_kcontrol *kcontrol,
 	mDac_Sinegen_Amplitude = index;
 	return 0;
 }
+/* FLARE_A Start AUD_20_0012 */
+#ifdef CONFIG_KYOCERA_MSND//add Audio_SineGen_Freq_Div_Chx control
+#define FREQ_DIV_CH2_SFT                              12
+#define FREQ_DIV_CH2_MASK                             0x1f
+#define FREQ_DIV_CH2_MASK_SFT                         (0x1f << 12)
+#define FREQ_DIV_CH1_SFT                              0
+#define FREQ_DIV_CH1_MASK                             0x1f
+#define FREQ_DIV_CH1_MASK_SFT                         (0x1f << 0)
 
+static int Audio_SineGen_Freq_Div_Ch1_Get(struct snd_kcontrol *kcontrol,
+				       struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("Audio_SineGen_Freq_Div_Ch1_Get = %d\n", freq_div_ch1);
+	ucontrol->value.integer.value[0] = freq_div_ch1;
+	return 0;
+}
+static int Audio_SineGen_Freq_Div_Ch1_Set(struct snd_kcontrol *kcontrol,
+				       struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s()\n", __func__);
+	freq_div_ch1 = ucontrol->value.integer.value[0];
+	if(freq_div_ch1 < 0 || freq_div_ch1 > 31){
+		pr_err("%s() : invalid param.\n", __func__);
+		return 0;
+	}
+	Afe_Set_Reg(AFE_SGEN_CON0, ((freq_div_ch1 & FREQ_DIV_CH1_MASK) << FREQ_DIV_CH1_SFT), FREQ_DIV_CH1_MASK_SFT);
+
+	return 0;
+}
+static int Audio_SineGen_Freq_Div_Ch2_Get(struct snd_kcontrol *kcontrol,
+				       struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("Audio_SineGen_Freq_Div_Ch2_Get = %d\n", freq_div_ch2);
+	ucontrol->value.integer.value[0] = freq_div_ch2;
+	return 0;
+}
+static int Audio_SineGen_Freq_Div_Ch2_Set(struct snd_kcontrol *kcontrol,
+				       struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s()\n", __func__);
+	freq_div_ch2 = ucontrol->value.integer.value[0];
+	if(freq_div_ch2 < 0 || freq_div_ch2 > 31){
+		pr_err("%s() : invalid param.\n", __func__);
+		return 0;
+	}
+	Afe_Set_Reg(AFE_SGEN_CON0, ((freq_div_ch2 & FREQ_DIV_CH2_MASK) << FREQ_DIV_CH2_SFT), FREQ_DIV_CH2_MASK_SFT);
+
+	return 0;
+}
+#endif
+/* FLARE_A End AUD_20_0012 */
 static int Audio_STF_Get(struct snd_kcontrol *kcontrol,
 			 struct snd_ctl_elem_value *ucontrol)
 {
@@ -762,6 +822,14 @@ static const struct snd_kcontrol_new Audio_snd_routing_controls[] = {
 		     Audio_SineGen_SampleRate_Set),
 	SOC_ENUM_EXT("Audio_SineGen_Amplitude", Audio_Routing_Enum[2],
 		     Audio_SineGen_Amplitude_Get, Audio_SineGen_Amplitude_Set),
+/* FLARE_A Start AUD_20_0012 */
+#ifdef CONFIG_KYOCERA_MSND//add Audio_SineGen_Freq_Div_Chx control
+	SOC_SINGLE_EXT("Audio_SineGen_Freq_Div_Ch1", AFE_SGEN_CON0, FREQ_DIV_CH1_SFT, FREQ_DIV_CH1_MASK, 0,
+		       Audio_SineGen_Freq_Div_Ch1_Get, Audio_SineGen_Freq_Div_Ch1_Set),
+	SOC_SINGLE_EXT("Audio_SineGen_Freq_Div_Ch2", AFE_SGEN_CON0, FREQ_DIV_CH2_SFT, FREQ_DIV_CH2_MASK, 0,
+		       Audio_SineGen_Freq_Div_Ch2_Get, Audio_SineGen_Freq_Div_Ch2_Set),
+#endif
+/* FLARE_A End AUD_20_0012 */
 	SOC_ENUM_EXT("Audio_Sidetone_Switch", Audio_Routing_Enum[3],
 		     Audio_STF_Get, Audio_STF_Set),
 	SOC_SINGLE_EXT("Sidetone_Gain", SND_SOC_NOPM, 0, 0x7fff, 0,

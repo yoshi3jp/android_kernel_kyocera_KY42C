@@ -126,6 +126,12 @@
 #define RG_ACCDET_MODE_ANA10_MODE1	(0x0807)
 #define RG_ACCDET_MODE_ANA10_MODE2	(0x0887)
 #define RG_ACCDET_MODE_ANA10_MODE6	(0x0887)
+#define ACCDET_EINT_COMP_THRESH_B10	(0x01<<10)
+
+/* AUDENC_ANA_CON10,
+ * EINT comparator threshold voltage
+ * bit10: 1,2.0V; 0,2.4V
+ */
 
 /* ------Register_AUXADC_REG  Bit Define------ */
 /* AUXADC_ADC5:  Auxadc CH5 read data */

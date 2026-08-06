@@ -1,7 +1,11 @@
 # Makefile for the Linux sound card driver
 #
 
+# This software is contributed or developed by KYOCERA Corporation.
+# (C) 2022 KYOCERA Corporation
+
 subdir-ccflags-y += -Werror
+subdir-ccflags-y += -DCONFIG_KYOCERA_MSND
 
 obj-$(CONFIG_SOUND) += soundcore.o
 obj-$(CONFIG_SOUND_PRIME) += oss/

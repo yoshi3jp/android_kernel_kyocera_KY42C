@@ -14,6 +14,10 @@
  * along with this program.
  * If not, see <http://www.gnu.org/licenses/>.
  */
+/*
+   This software is contributed or developed by KYOCERA Corporation.
+   (C) 2022 KYOCERA Corporation
+ */
 /******************************************************************************
  *
  * Filename:
@@ -63,6 +67,9 @@
 #include "mtk-auddrv-gpio.h"
 #include "mtk-soc-analog-type.h"
 #include "mtk-soc-codec-63xx.h"
+#ifdef CONFIG_SENSORS_SOUND_VIB_PREVENTION
+#include <linux/sensor_prevention.h>
+#endif
 /* Use analog setting to do dc compensation */
 #define ANALOG_HPTRIM
 //#define ANALOG_HPTRIM_FOR_CUST
@@ -179,6 +186,10 @@ int (*set_hp_impedance_ctl)(bool enable) = NULL;
 #define SOC_HIGH_USE_RATE (\
 				SNDRV_PCM_RATE_CONTINUOUS |\
 				SNDRV_PCM_RATE_8000_192000)
+
+/* MICBIAS0 Output Voltage, 0x0021 means 1P9V, 0x0011 means 1P8V */
+#define MICBIAS0_VOL_REG (0x0011)
+
 static void Audio_Amp_Change(int channels, bool enable);
 static void SavePowerState(void)
 {
@@ -3296,8 +3307,8 @@ static int PMIC_REG_CLEAR_Set(struct snd_kcontrol *kcontrol,
 	Ana_Set_Reg(AFE_DCCLK_CFG1, 0x0100, 0xffff);
 	/* phone mic bias */
 	/* Enable MICBIAS0, MISBIAS0 = 1P9V */
-	Ana_Set_Reg(AUDENC_ANA_CON8, 0x0021, 0xffff);
-
+	//Ana_Set_Reg(AUDENC_ANA_CON8, 0x0021, 0xffff);
+	Ana_Set_Reg(AUDENC_ANA_CON8, MICBIAS0_VOL_REG, 0xffff);
 
 	/* Audio L preamplifier DCC precharge */
 	Ana_Set_Reg(AUDENC_ANA_CON0, 0x0004, 0xffff);
@@ -3549,7 +3560,9 @@ static void Speaker_Amp_Change(bool enable)
 		/* disable Pull-down HPL/R to AVSS28_AUD */
 		if (mIsNeedPullDown)
 			hp_pull_down(false);
-
+#ifdef CONFIG_SENSORS_SOUND_VIB_PREVENTION
+		sensor_ext_sound_vib_prevention_switch(SOUND_PREVENTION_ON);
+#endif
 	} else {
 		pr_debug("%s(), enable %d\n", __func__, enable);
 		/* LOL mux to open */
@@ -3585,6 +3598,9 @@ static void Speaker_Amp_Change(bool enable)
 			Ana_Set_Reg(AUDNCP_CLKDIV_CON3, 0x1, 0x1);
 			TurnOffDacPower();
 		}
+#ifdef CONFIG_SENSORS_SOUND_VIB_PREVENTION
+		sensor_ext_sound_vib_prevention_switch(SOUND_PREVENTION_OFF);
+#endif
 	}
 }
 static int Speaker_Amp_Get(struct snd_kcontrol *kcontrol,
@@ -3623,14 +3639,14 @@ static void Ext_Speaker_Amp_Change(bool enable)
 	pr_debug("%s(), enable %d\n", __func__, enable);
 #define SPK_WARM_UP_TIME        (25)	/* unit is ms */
 	if (enable) {
-		AudDrv_GPIO_EXTAMP_Select(false, 3);
+		AudDrv_GPIO_EXTAMP_Select(false, 1);
 		/*udelay(1000); */
 		usleep_range(1 * 1000, 2 * 1000);
-		AudDrv_GPIO_EXTAMP_Select(true, 3);
-		usleep_range(5 * 1000, 10 * 1000);
+		AudDrv_GPIO_EXTAMP_Select(true, 1);
+		//usleep_range(5 * 1000, 10 * 1000);
 	} else {
-		AudDrv_GPIO_EXTAMP_Select(false, 3);
-		udelay(500);
+		AudDrv_GPIO_EXTAMP_Select(false, 1);
+		//udelay(500);
 	}
 }
 static int Ext_Speaker_Amp_Get(struct snd_kcontrol *kcontrol,
@@ -3658,6 +3674,25 @@ static int Ext_Speaker_Amp_Set(struct snd_kcontrol *kcontrol,
 		    ucontrol->value.integer.value[0];
 		Ext_Speaker_Amp_Change(false);
 	}
+	return 0;
+}
+static int Ext_Speaker_Amp_Sel_Get(struct snd_kcontrol *kcontrol,
+			       struct snd_ctl_elem_value *ucontrol)
+{
+	/* pr_debug("%s()\n", __func__); */
+	ucontrol->value.integer.value[0] =
+		mCodec_data->mAudio_Ana_DevicePower
+			[AUDIO_ANALOG_DEVICE_OUT_EXTSPKAMP];
+	return 0;
+}
+static int Ext_Speaker_Amp_Sel_Set(struct snd_kcontrol *kcontrol,
+			       struct snd_ctl_elem_value *ucontrol)
+{
+	int val = ucontrol->value.integer.value[0];
+	pr_debug("%s() sel = %d\n ", __func__, val);
+
+	AudDrv_GPIO_SPK_Select(val);
+	mCodec_data->mAudio_Ana_DevicePower[AUDIO_ANALOG_DEVICE_OUT_EXTSPKAMP] = val;
 	return 0;
 }
 static void Receiver_Speaker_Switch_Change(bool enable)
@@ -3961,6 +3996,7 @@ static const char *const DAC_DL_PGA_Speaker_GAIN[] = {
 	"-1Db", "-2Db", "-3Db",
 	"-4Db", "-5Db", "-6Db", "-7Db", "-8Db", "-9Db", "-10Db", "-40Db"
 };
+static const char *const amp_LR_switch[] = { "Off", "Left", "Right", "Stereo"};
 /* static const char *Voice_Mux_function[] = {"Voice", "Speaker"}; */
 static int Lineout_PGAL_Get(struct snd_kcontrol *kcontrol,
 			    struct snd_ctl_elem_value *ucontrol)
@@ -4338,6 +4374,7 @@ static const struct soc_enum Audio_DL_Enum[] = {
 			    dctrim_control_state),
 	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(apply_n12db_setting),
 			    apply_n12db_setting),
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(amp_LR_switch), amp_LR_switch),
 };
 static const struct snd_kcontrol_new mt6357_snd_controls[] = {
 	SOC_ENUM_EXT("Audio_Amp_R_Switch", Audio_DL_Enum[0], Audio_AmpR_Get,
@@ -4369,6 +4406,9 @@ static const struct snd_kcontrol_new mt6357_snd_controls[] = {
 	SOC_ENUM_EXT("Receiver_Speaker_Switch", Audio_DL_Enum[11],
 		     Receiver_Speaker_Switch_Get,
 		     Receiver_Speaker_Switch_Set),
+	SOC_ENUM_EXT("Ext_Speaker_Amp_Sel", Audio_DL_Enum[15],
+		     Ext_Speaker_Amp_Sel_Get,
+		     Ext_Speaker_Amp_Sel_Set),
 	SOC_ENUM_EXT("PMIC_REG_CLEAR", Audio_DL_Enum[12],
 		     PMIC_REG_CLEAR_Get, PMIC_REG_CLEAR_Set),
 	SOC_SINGLE_EXT("Codec_ADC_SampleRate", SND_SOC_NOPM,
@@ -4440,7 +4480,8 @@ static bool TurnOnADcPowerACC(int ADCType, bool enable)
 				[AUDIO_MICSOURCE_MUX_IN_1] == 0) {
 				/* phone mic */
 				/* Enable MICBIAS0, MISBIAS0 = 1P9V */
-				Ana_Set_Reg(AUDENC_ANA_CON8, 0x0021, 0xffff);
+				//Ana_Set_Reg(AUDENC_ANA_CON8, 0x0021, 0xffff);
+				Ana_Set_Reg(AUDENC_ANA_CON8, MICBIAS0_VOL_REG, 0xffff);
 			} else if (mCodec_data->mAudio_Ana_Mux
 					[AUDIO_MICSOURCE_MUX_IN_1] == 1) {
 				/* headset mic */
@@ -4590,7 +4631,8 @@ static bool TurnOnADcPowerDmic(int ADCType, bool enable)
 			set_capture_gpio(true);
 			/* mic bias */
 			/* Enable MICBIAS0, MISBIAS0 = 1P9V */
-			Ana_Set_Reg(AUDENC_ANA_CON8, 0x0021, 0xffff);
+			//Ana_Set_Reg(AUDENC_ANA_CON8, 0x0021, 0xffff);
+			Ana_Set_Reg(AUDENC_ANA_CON8, MICBIAS0_VOL_REG, 0xffff);
 			/* RG_BANDGAPGEN=1'b0 */
 			Ana_Set_Reg(AUDENC_ANA_CON9, 0x0, 0x1 << 12);
 			/* DMIC enable */
@@ -4704,7 +4746,8 @@ static bool TurnOnADcPowerDCC(int ADCType, bool enable, int ECMmode)
 					break;
 				}
 				/* Enable MICBIAS0, MISBIAS0 = 1P9V */
-				Ana_Set_Reg(AUDENC_ANA_CON8, 0x0021, 0x00ff);
+				//Ana_Set_Reg(AUDENC_ANA_CON8, 0x0021, 0x00ff);
+				Ana_Set_Reg(AUDENC_ANA_CON8, MICBIAS0_VOL_REG, 0x00ff);
 			} else if (mCodec_data->mAudio_Ana_Mux
 					[AUDIO_MICSOURCE_MUX_IN_1] == 1) {
 				/* headset mic */

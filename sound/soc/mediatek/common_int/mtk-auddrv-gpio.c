@@ -14,6 +14,10 @@
  * along with this program.
  * If not, see <http://www.gnu.org/licenses/>.
  */
+/*
+ This software is contributed or developed by KYOCERA Corporation.
+ (C) 2022 KYOCERA Corporation
+ */
 
 /*******************************************************************************
  *
@@ -597,6 +601,29 @@ int AudDrv_GPIO_RCVSPK_Select(int bEnable)
 	}
 	mutex_unlock(&gpio_request_mutex);
 #endif
+	return retval;
+}
+
+int AudDrv_GPIO_SPK_Select(int bEnable)
+{
+	int retval = 0;
+	pr_debug("%s (%d)\n", __func__, bEnable);
+
+	mutex_lock(&gpio_request_mutex);
+	if (bEnable == 1){ //Left
+		AudDrv_GPIO_Select(GPIO_EXTAMP_HIGH);
+		AudDrv_GPIO_Select(GPIO_EXTAMP2_LOW);
+	}else if(bEnable == 2){ //Right
+		AudDrv_GPIO_Select(GPIO_EXTAMP_LOW);
+		AudDrv_GPIO_Select(GPIO_EXTAMP2_HIGH);
+	}else if(bEnable == 3){ //Stereo
+		AudDrv_GPIO_Select(GPIO_EXTAMP_HIGH);
+		AudDrv_GPIO_Select(GPIO_EXTAMP2_HIGH);
+	}else{ //Off
+		AudDrv_GPIO_Select(GPIO_EXTAMP_LOW);
+		AudDrv_GPIO_Select(GPIO_EXTAMP2_LOW);
+	}
+	mutex_unlock(&gpio_request_mutex);
 	return retval;
 }
 

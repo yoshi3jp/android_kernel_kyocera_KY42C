@@ -1,4 +1,8 @@
 /*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2022 KYOCERA Corporation
+ */
+/*
  * Copyright (C) 2017 MediaTek Inc.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -24,6 +28,13 @@
 #include <linux/irq.h>
 #include "reg_accdet.h"
 #include <mach/upmu_hw.h>
+
+/* FLARE A AUD_20_0017 Start */
+#ifdef CONFIG_KYOCERA_MSND
+#include <linux/gpio.h>
+#include <linux/of_gpio.h>
+#endif
+/* FLARE A AUD_20_0017 End */
 
 #define REGISTER_VAL(x)	(x - 1)
 
@@ -89,6 +100,11 @@ static struct workqueue_struct *accdet_workqueue;
 /* when  eint issued, queue work: eint_work */
 static struct work_struct eint_work;
 static struct workqueue_struct *eint_workqueue;
+/* FLARE A AUD_20_0017 Start */
+#ifdef CONFIG_KYOCERA_MSND
+static struct delayed_work accdet_ptt_sw_dwork;
+#endif
+/* FLARE A AUD_20_0017 End */
 
 /* micbias_timer: disable micbias if no accdet irq after eint,
  * timeout: 6 seconds
@@ -171,6 +187,25 @@ static struct task_struct *thread;
 static void accdet_init_once(void);
 static inline void accdet_init(void);
 static void send_accdet_status_event(u32 cable_type, u32 status);
+
+/* FLARE A AUD_20_0017 Start */
+#ifdef CONFIG_KYOCERA_MSND
+#define PTT_SW_LEVEL_PUSH 0
+/* FLARE A AUD_20_0027 Start */
+#define PTT_SW_POLLING_ONE_TIME_PUSH 25
+#define PTT_SW_POLLING_ONE_TIME_RELEASE 40
+/* FLARE A AUD_20_0027 End */
+#define PTT_SW_POLLING_PUSH_CNT 5
+#define PTT_SW_POLLING_RELEASE_CNT 2
+
+static unsigned int gpio_irq_ptt=0;
+static int gpio_level_push_ptt=PTT_SW_LEVEL_PUSH;
+static int ptt_irq_state=0xff;
+static int ptt_poll_state=0xff;
+static int ptt_poll_cnt=0;
+static bool ptt_req_flag=false;
+#endif
+/* FLARE A AUD_20_0017 End */
 
 static inline u32 pmic_read(u32 addr)
 {
@@ -660,6 +695,44 @@ static void accdet_get_efuse(void)
 
 }
 
+/* FLARE A AUD_20_0017 Start */
+#ifdef CONFIG_KYOCERA_MSND
+static void accdet_ptt_sw_set_irq(bool enable)
+{
+	pr_info("%s() \n", __func__);
+
+	if (gpio_irq_ptt) {
+		if (ptt_irq_state == enable)
+			return;
+
+		if (enable) {
+			enable_irq(gpio_to_irq(gpio_irq_ptt));
+			enable_irq_wake(gpio_to_irq(gpio_irq_ptt));
+		} else {
+			disable_irq_wake(gpio_to_irq(gpio_irq_ptt));
+			disable_irq(gpio_to_irq(gpio_irq_ptt));
+		}
+		ptt_irq_state = enable;
+	}
+}
+
+static irqreturn_t accdet_ptt_sw_irq(int irq, void *data)
+{
+	pr_info("%s \n", __func__);
+
+	if (gpio_to_irq(gpio_irq_ptt) != irq)
+	{
+		return IRQ_NONE;
+	}
+
+	cancel_delayed_work_sync(&accdet_ptt_sw_dwork);
+	schedule_delayed_work(&accdet_ptt_sw_dwork, msecs_to_jiffies(1));
+
+	return IRQ_HANDLED;
+}
+#endif
+/* FLARE A AUD_20_0017 End */
+
 #ifdef CONFIG_FOUR_KEY_HEADSET
 static u32 key_check(u32 v)
 {
@@ -702,15 +775,24 @@ static void send_key_event(u32 keycode, u32 flag)
 		pr_debug("accdet KEY_VOLUMEUP %d\n", flag);
 		break;
 	case MD_KEY:
-		input_report_key(accdet_input_dev, KEY_PLAYPAUSE, flag);
+		input_report_key(accdet_input_dev, KEY_MEDIA, flag);
 		input_sync(accdet_input_dev);
-		pr_debug("accdet KEY_PLAYPAUSE %d\n", flag);
+		pr_debug("accdet KEY_MEDIA %d\n", flag);
 		break;
 	case AS_KEY:
 		input_report_key(accdet_input_dev, KEY_VOICECOMMAND, flag);
 		input_sync(accdet_input_dev);
 		pr_debug("accdet KEY_VOICECOMMAND %d\n", flag);
 		break;
+/* FLARE A AUD_20_0017 Start */
+#ifdef CONFIG_KYOCERA_MSND
+	case PTT_KEY:
+		input_report_key(accdet_input_dev, KEY_SEND, flag);
+		input_sync(accdet_input_dev);
+		pr_debug("accdet KEY_SEND(PTT KEY) %d\n", flag);
+		break;
+#endif
+/* FLARE A AUD_20_0017 End */
 	}
 }
 
@@ -755,6 +837,17 @@ static void send_accdet_status_event(u32 cable_type, u32 status)
 	default:
 		pr_info("%s Invalid cableType\n", __func__);
 	}
+
+/* FLARE A AUD_20_0017 Start */
+#ifdef CONFIG_KYOCERA_MSND
+	if( (cable_type==HEADSET_MIC) && (status!=0) ) {
+		accdet_ptt_sw_set_irq(1);
+	} else {
+		accdet_ptt_sw_set_irq(0);
+	}
+#endif
+/* FLARE A AUD_20_0017 End */
+
 }
 
 static void multi_key_detection(u32 cur_AB)
@@ -1002,6 +1095,8 @@ static void dis_micbias_timerhandler(unsigned long data)
 
 static void dis_micbias_work_callback(struct work_struct *work)
 {
+/* FLARE_D Start AUD_20_0018 */
+#ifndef CONFIG_KYOCERA_MSND
 	if (cable_type == HEADSET_NO_MIC) {
 		/* setting pwm idle; */
 		pmic_write(ACCDET_STATE_SWCTRL,
@@ -1010,6 +1105,8 @@ static void dis_micbias_work_callback(struct work_struct *work)
 		disable_accdet();
 		pr_info("accdet %s more than 6s,MICBIAS:Disabled\n", __func__);
 	}
+#endif
+/* FLARE_D End AUD_20_0018 */
 }
 
 static void eint_work_callback(struct work_struct *work)
@@ -1065,6 +1162,59 @@ static void eint_work_callback(struct work_struct *work)
 	pr_info("accdet %s enable_irq !!\n", __func__);
 #endif
 }
+
+/* FLARE A AUD_20_0017 Start */
+#ifdef CONFIG_KYOCERA_MSND
+static void accdet_ptt_sw_lpress_fn(struct work_struct *work)
+{
+	int val;
+	bool report = 0;
+
+	pr_info("%s \n", __func__);
+
+	val = gpio_get_value_cansleep(gpio_irq_ptt);
+	if (ptt_poll_state == val) {
+		ptt_poll_cnt++;
+	} else {
+		ptt_poll_cnt=1;
+	}
+
+	pr_debug("PTT_SW_GPIO = %d poll_state = %d poll_cnt = %d\n", val, ptt_poll_state, ptt_poll_cnt);
+
+	ptt_poll_state = val;
+
+	if (val == gpio_level_push_ptt) {
+		if (ptt_poll_cnt >= PTT_SW_POLLING_PUSH_CNT) {
+			pr_debug("%s: Reporting ptt button press event \n", __func__);
+			report = 1;
+			send_key_event(PTT_KEY, 1);
+		}
+/* FLARE A AUD_20_0027 Start */
+		if (report) {
+			ptt_poll_cnt = 0;
+		} else {
+			pr_debug("*** PTT_SW POLLING GPIO (%d) COUNT (%d) ***\n", val, ptt_poll_cnt);
+			schedule_delayed_work(&accdet_ptt_sw_dwork, msecs_to_jiffies(PTT_SW_POLLING_ONE_TIME_PUSH));
+		}
+/* FLARE A AUD_20_0027 End */
+	} else {
+		if (ptt_poll_cnt >= PTT_SW_POLLING_RELEASE_CNT) {
+			pr_debug("%s: Reporting ptt button release event \n", __func__);
+			report = 1;
+			send_key_event(PTT_KEY, 0);
+		}
+/* FLARE A AUD_20_0027 Start */
+		if (report) {
+			ptt_poll_cnt = 0;
+		} else {
+			pr_debug("*** PTT_SW POLLING GPIO (%d) COUNT (%d) ***\n", val, ptt_poll_cnt);
+			schedule_delayed_work(&accdet_ptt_sw_dwork, msecs_to_jiffies(PTT_SW_POLLING_ONE_TIME_RELEASE));
+		}
+/* FLARE A AUD_20_0027 End */
+	}
+}
+#endif
+/* FLARE A AUD_20_0017 End */
 
 static void accdet_set_debounce(int state, unsigned int debounce)
 {
@@ -1183,8 +1333,17 @@ static inline void check_cable_type(void)
 		} else if (cur_AB == ACCDET_STATE_AB_11) {
 			pr_info("accdet Don't send plug out in MIC_BIAS\n");
 			mutex_lock(&accdet_eint_irq_sync_mutex);
+/* FLARE A AUD_20_0028 Start */
+#ifdef CONFIG_KYOCERA_MSND
+			if (eint_accdet_sync_flag) {
+				accdet_status = PLUG_OUT;
+				cable_type = NO_DEVICE;
+			}
+#else
 			if (eint_accdet_sync_flag)
 				accdet_status = PLUG_OUT;
+#endif
+/* FLARE A AUD_20_0028 End */
 			else
 				pr_info("accdet headset has been plug-out\n");
 			mutex_unlock(&accdet_eint_irq_sync_mutex);
@@ -1220,8 +1379,17 @@ static inline void check_cable_type(void)
 		} else if (cur_AB == ACCDET_STATE_AB_11) {
 			pr_info("accdet Don't send plugout in HOOK_SWITCH\n");
 			mutex_lock(&accdet_eint_irq_sync_mutex);
+/* FLARE A AUD_20_0028 Start */
+#ifdef CONFIG_KYOCERA_MSND
+			if (eint_accdet_sync_flag) {
+				accdet_status = PLUG_OUT;
+				cable_type = NO_DEVICE;
+			}
+#else
 			if (eint_accdet_sync_flag)
 				accdet_status = PLUG_OUT;
+#endif
+/* FLARE A AUD_20_0028 End */
 			else
 				pr_info("accdet headset has been plug-out\n");
 			mutex_unlock(&accdet_eint_irq_sync_mutex);
@@ -1250,8 +1418,19 @@ static void accdet_work_callback(struct work_struct *work)
 
 	mutex_lock(&accdet_eint_irq_sync_mutex);
 	if (eint_accdet_sync_flag) {
+/* FLARE A AUD_20_0028 Start */
+#ifdef CONFIG_KYOCERA_MSND
+		if (pre_cable_type != cable_type) {
+			if (cable_type != NO_DEVICE)
+				send_accdet_status_event(cable_type, 1);
+			else
+				send_accdet_status_event(pre_cable_type, 0);
+		}
+#else
 		if (pre_cable_type != cable_type)
 			send_accdet_status_event(cable_type, 1);
+#endif
+/* FLARE A AUD_20_0028 End */
 	} else
 		pr_info("%s() Headset has been plugout. Don't set state\n",
 			__func__);
@@ -1638,10 +1817,11 @@ static int accdet_get_dts_data(void)
 	of_property_read_u32(node, "accdet-mic-mode", &accdet_dts.mic_mode);
 	of_property_read_u32(node, "headset-eint-level-pol",
 			&accdet_dts.eint_pol);
+	of_property_read_u32(node, "eint-comp-thresh", &accdet_dts.eint_comp_thresh);
 
-	pr_info("accdet mic_vol=%d, plugout_deb=%d mic_mode=%d eint_pol=%d\n",
+	pr_info("accdet mic_vol=%d, plugout_deb=%d mic_mode=%d eint_pol=%d eint_comp_thresh=%d\n",
 	     accdet_dts.mic_vol, accdet_dts.plugout_deb,
-	     accdet_dts.mic_mode, accdet_dts.eint_pol);
+	     accdet_dts.mic_mode, accdet_dts.eint_pol, accdet_dts.eint_comp_thresh);
 
 #ifdef CONFIG_FOUR_KEY_HEADSET
 	ret = of_property_read_u32_array(node, "headset-four-key-threshold",
@@ -1683,6 +1863,14 @@ static int accdet_get_dts_data(void)
 	else
 		pr_info("accdet get pwm-debounce setting fail\n");
 
+/* FLARE A AUD_20_0017 Start */
+#ifdef CONFIG_KYOCERA_MSND
+	if (gpio_is_valid(of_get_named_gpio(node,"kc,ptt-sw-gpios", 0))) {
+		gpio_irq_ptt = of_get_named_gpio(node,"kc,ptt-sw-gpios", 0);
+	}
+#endif
+/* FLARE A AUD_20_0017 End */
+
 	/* for discharge:0xB00 about 86ms */
 	button_press_debounce = (accdet_dts.pwm_deb.debounce0 >> 1);
 	cust_pwm_deb = &accdet_dts.pwm_deb;
@@ -1699,6 +1887,11 @@ static int accdet_get_dts_data(void)
 static void accdet_init_once(void)
 {
 	unsigned int reg = 0;
+/* FLARE A AUD_20_0017 Start */
+#ifdef CONFIG_KYOCERA_MSND
+	int ret = 0;
+#endif
+/* FLARE A AUD_20_0017 End */
 
 	/* reset the accdet unit */
 	pmic_write(AUD_TOP_RST_CON0, RG_ACCDET_RST_B1);
@@ -1721,9 +1914,14 @@ static void accdet_init_once(void)
 	/* mic mode setting */
 	reg = pmic_read(AUDENC_ANA_CON10);
 	/* ACC mode*/
-	if (accdet_dts.mic_mode == HEADSET_MODE_1)
+	if (accdet_dts.mic_mode == HEADSET_MODE_1) {
+		unsigned int reg_val = RG_ACCDET_MODE_ANA10_MODE1;
+		if (accdet_dts.eint_comp_thresh == 1) {
+			reg_val = reg_val | ACCDET_EINT_COMP_THRESH_B10;
+		}
 		pmic_write(AUDENC_ANA_CON10,
-			reg | RG_ACCDET_MODE_ANA10_MODE1);
+			reg | reg_val);
+	}
 	/* Low cost mode without internal bias*/
 	else if (accdet_dts.mic_mode == HEADSET_MODE_2)
 		pmic_write(AUDENC_ANA_CON10,
@@ -1845,6 +2043,24 @@ static void accdet_init_once(void)
 		pmic_read(ACCDET_CTRL) | ACCDET_EINT_EN_B2_4);
 #endif
 #endif
+
+/* FLARE A AUD_20_0017 Start */
+#ifdef CONFIG_KYOCERA_MSND
+	if (gpio_irq_ptt && !ptt_req_flag) {
+		ret = request_threaded_irq(gpio_to_irq(gpio_irq_ptt), NULL,
+									accdet_ptt_sw_irq,
+									(IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_ONESHOT),
+									"ptt_sw_detect", NULL);
+		if (ret) {
+			pr_err("%s: Failed to request gpio irq ptt %d\n", __func__, gpio_to_irq(gpio_irq_ptt));
+		} else {
+			ptt_req_flag = true;
+			accdet_ptt_sw_set_irq(0);
+		}
+	}
+#endif
+/* FLARE A AUD_20_0017 End */
+
 	pr_info("%s() done.\n", __func__);
 }
 
@@ -1953,10 +2169,15 @@ int mt_accdet_probe(struct platform_device *dev)
 	}
 
 	__set_bit(EV_KEY, accdet_input_dev->evbit);
-	__set_bit(KEY_PLAYPAUSE, accdet_input_dev->keybit);
+	__set_bit(KEY_MEDIA, accdet_input_dev->keybit);
 	__set_bit(KEY_VOLUMEDOWN, accdet_input_dev->keybit);
 	__set_bit(KEY_VOLUMEUP, accdet_input_dev->keybit);
 	__set_bit(KEY_VOICECOMMAND, accdet_input_dev->keybit);
+/* FLARE A AUD_20_0017 Start */
+#ifdef CONFIG_KYOCERA_MSND
+	__set_bit(KEY_SEND, accdet_input_dev->keybit);
+#endif
+/* FLARE A AUD_20_0017 End */
 
 	__set_bit(EV_SW, accdet_input_dev->evbit);
 	__set_bit(SW_HEADPHONE_INSERT, accdet_input_dev->swbit);
@@ -2041,6 +2262,11 @@ int mt_accdet_probe(struct platform_device *dev)
 		pr_notice("%s create eint workqueue fail.\n", __func__);
 		goto err_create_workqueue;
 	}
+/* FLARE A AUD_20_0017 Start */
+#ifdef CONFIG_KYOCERA_MSND
+	INIT_DELAYED_WORK(&accdet_ptt_sw_dwork, accdet_ptt_sw_lpress_fn);
+#endif
+/* FLARE A AUD_20_0017 End */
 
 #ifdef CONFIG_ACCDET_EINT
 	ret = ext_eint_setup(dev);
@@ -2088,6 +2314,15 @@ void mt_accdet_remove(void)
 	pr_debug("%s enter!\n", __func__);
 
 	/* cancel_delayed_work(&accdet_work); */
+/* FLARE A AUD_20_0017 Start */
+#ifdef CONFIG_KYOCERA_MSND
+	if(gpio_irq_ptt) {
+		free_irq(gpio_to_irq(gpio_irq_ptt), NULL);
+		ptt_req_flag = false;
+	}
+	cancel_delayed_work(&accdet_ptt_sw_dwork);
+#endif
+/* FLARE A AUD_20_0017 End */
 	destroy_workqueue(eint_workqueue);
 	destroy_workqueue(dis_micbias_workqueue);
 	destroy_workqueue(accdet_workqueue);
