@@ -1,4 +1,7 @@
 /*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2022 KYOCERA Corporation
+ *
  * Copyright (C) 2016 MediaTek Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -16,6 +19,7 @@
 #include "inc/barometer.h"
 
 struct baro_context *baro_context_obj /* = NULL*/;
+struct temp_context *temp_context_obj /* = NULL*/;
 
 static void initTimer(struct hrtimer *timer,
 		      enum hrtimer_restart (*callback)(struct hrtimer *))
@@ -28,6 +32,39 @@ static void startTimer(struct hrtimer *timer, int delay_ms, bool first)
 {
 	struct baro_context *obj = (struct baro_context *)container_of(timer,
 		struct baro_context, hrTimer);
+
+	if (obj == NULL) {
+		pr_err("NULL pointer\n");
+		return;
+	}
+
+	if (first) {
+		obj->target_ktime =
+			ktime_add_ns(ktime_get(), (int64_t)delay_ms * 1000000);
+#if 0
+		pr_debug("cur_ns = %lld, first_target_ns = %lld\n",
+			ktime_to_ns(ktime_get()),
+			ktime_to_ns(obj->target_ktime));
+#endif
+	} else {
+		do {
+			obj->target_ktime = ktime_add_ns(
+				obj->target_ktime, (int64_t)delay_ms * 1000000);
+		} while (ktime_to_ns(obj->target_ktime) <
+			 ktime_to_ns(ktime_get()));
+#if 0
+		pr_debug("cur_ns = %lld, target_ns = %lld\n",
+		ktime_to_ns(ktime_get()), ktime_to_ns(obj->target_ktime));
+#endif
+	}
+
+	hrtimer_start(timer, obj->target_ktime, HRTIMER_MODE_ABS);
+}
+
+static void startTempTimer(struct hrtimer *timer, int delay_ms, bool first)
+{
+	struct temp_context *obj = (struct temp_context *)container_of(timer,
+		struct temp_context, hrTimer);
 
 	if (obj == NULL) {
 		pr_err("NULL pointer\n");
@@ -135,12 +172,92 @@ baro_loop:
 	}
 }
 
+static void temp_work_func(struct work_struct *work)
+{
+
+	struct temp_context *cxt = NULL;
+	/* hwm_sensor_data sensor_data; */
+	int value, status;
+	int64_t pre_ns, cur_ns;
+	int64_t delay_ms;
+	struct timespec time;
+	int err;
+
+	cxt = temp_context_obj;
+	delay_ms = atomic_read(&cxt->delay);
+
+	if (cxt->temp_data.get_data == NULL) {
+		pr_debug("temp driver not register data path\n");
+		goto temp_loop;
+	}
+
+	time.tv_sec = time.tv_nsec = 0;
+	get_monotonic_boottime(&time);
+	cur_ns = time.tv_sec * 1000000000LL + time.tv_nsec;
+
+	/* add wake lock to make sure data can be read before system suspend */
+	err = cxt->temp_data.get_data(&value, &status);
+
+	if (err) {
+		pr_err("get temp data fails!!\n");
+		goto temp_loop;
+	} else {
+		{
+			cxt->drv_data.temp_data.values[0] = value;
+			cxt->drv_data.temp_data.status = status;
+			pre_ns = cxt->drv_data.temp_data.time;
+			cxt->drv_data.temp_data.time = cur_ns;
+		}
+	}
+
+	if (true == cxt->is_first_data_after_enable) {
+		pre_ns = cur_ns;
+		cxt->is_first_data_after_enable = false;
+		/* filter -1 value */
+		if (cxt->drv_data.temp_data.values[0] == BARO_INVALID_VALUE) {
+			pr_debug(" read invalid data\n");
+			goto temp_loop;
+		}
+	}
+	/* report data to input device */
+	/*pr_debug("new temp work run....\n"); */
+	/*pr_debug("temp data[%d].\n", cxt->drv_data.temp_data.values[0]); */
+
+	while ((cur_ns - pre_ns) >= delay_ms * 1800000LL) {
+		pre_ns += delay_ms * 1000000LL;
+		temp_data_report(cxt->drv_data.temp_data.values[0],
+				 cxt->drv_data.temp_data.status, pre_ns);
+	}
+
+	temp_data_report(cxt->drv_data.temp_data.values[0],
+			 cxt->drv_data.temp_data.status,
+			 cxt->drv_data.temp_data.time);
+
+temp_loop:
+	if (true == cxt->is_polling_run) {
+		{
+			startTempTimer(&cxt->hrTimer, atomic_read(&cxt->delay),
+				   false);
+		}
+	}
+}
+
 enum hrtimer_restart baro_poll(struct hrtimer *timer)
 {
 	struct baro_context *obj = (struct baro_context *)container_of(timer,
 		struct baro_context, hrTimer);
 
 	queue_work(obj->baro_workqueue, &obj->report);
+
+	return HRTIMER_NORESTART;
+}
+
+enum hrtimer_restart temp_poll(struct hrtimer *timer)
+{
+	struct temp_context *obj = (struct temp_context *)container_of(timer,
+		struct temp_context, hrTimer);
+
+	queue_work(obj->temp_workqueue, &obj->report);
 
 	return HRTIMER_NORESTART;
 }
@@ -177,6 +294,41 @@ static struct baro_context *baro_context_alloc_object(void)
 	pr_debug("%s end\n", __func__);
 	return obj;
 }
+
+static struct temp_context *temp_context_alloc_object(void)
+{
+
+	struct temp_context *obj = kzalloc(sizeof(*obj), GFP_KERNEL);
+
+	pr_debug("%s start\n", __func__);
+	if (!obj) {
+		pr_err("Alloc temp object error!\n");
+		return NULL;
+	}
+	atomic_set(&obj->delay, 200); /*5Hz set work queue delay time 200 ms */
+	atomic_set(&obj->wake, 0);
+	INIT_WORK(&obj->report, temp_work_func);
+	obj->temp_workqueue = NULL;
+	obj->temp_workqueue = create_workqueue("temp_polling");
+	if (!obj->temp_workqueue) {
+		kfree(obj);
+		return NULL;
+	}
+	initTimer(&obj->hrTimer, temp_poll);
+	obj->is_first_data_after_enable = false;
+	obj->is_polling_run = false;
+	mutex_init(&obj->temp_op_mutex);
+	obj->is_batch_enable = false; /* for batch mode init */
+	obj->power = 0;
+	obj->enable = 0;
+	obj->delay_ns = -1;
+	obj->latency_ns = -1;
+
+	pr_debug("%s end\n", __func__);
+	return obj;
+}
+
+
 #if !defined(CONFIG_NANOHUB)
 static int baro_enable_and_batch(void)
 {
@@ -257,7 +409,87 @@ static int baro_enable_and_batch(void)
 	}
 	return 0;
 }
+static int temp_enable_and_batch(void)
+{
+	struct temp_context *cxt = temp_context_obj;
+	int err;
+
+	/* power on -> power off */
+	if (cxt->power == 1 && cxt->enable == 0) {
+		pr_debug("TEMP disable\n");
+		/* stop polling firstly, if needed */
+		if (cxt->temp_ctl.is_report_input_direct == false &&
+		    cxt->is_polling_run == true) {
+			smp_mb(); /* for memory barrier */
+			stopTimer(&cxt->hrTimer);
+			smp_mb(); /* for memory barrier */
+			cancel_work_sync(&cxt->report);
+			cxt->drv_data.temp_data.values[0] = BARO_INVALID_VALUE;
+			cxt->is_polling_run = false;
+			pr_debug("temp stop polling done\n");
+		}
+		/* turn off the power */
+		err = cxt->temp_ctl.enable_nodata(0);
+		if (err) {
+			pr_err("temp turn off power err = %d\n", err);
+			return -1;
+		}
+		pr_debug("temp turn off power done\n");
+
+		cxt->power = 0;
+		cxt->delay_ns = -1;
+		pr_debug("TEMP disable done\n");
+		return 0;
+	}
+	/* power off -> power on */
+	if (cxt->power == 0 && cxt->enable == 1) {
+		pr_debug("TEMP power on\n");
+		err = cxt->temp_ctl.enable_nodata(1);
+		if (err) {
+			pr_err("temp turn on power err = %d\n", err);
+			return -1;
+		}
+		pr_debug("temp turn on power done\n");
+
+		cxt->power = 1;
+		pr_debug("TEMP power on done\n");
+	}
+	/* rate change */
+	if (cxt->power == 1 && cxt->delay_ns >= 0) {
+		pr_debug("TEMP set batch\n");
+		/* set ODR, fifo timeout latency */
+		if (cxt->temp_ctl.is_support_batch)
+			err = cxt->temp_ctl.batch(0, cxt->delay_ns,
+						  cxt->latency_ns);
+		else
+			err = cxt->temp_ctl.batch(0, cxt->delay_ns, 0);
+		if (err) {
+			pr_err("temp set batch(ODR) err %d\n", err);
+			return -1;
+		}
+		pr_debug("temp set ODR, fifo latency done\n");
+		/* start polling, if needed */
+		if (cxt->temp_ctl.is_report_input_direct == false) {
+			uint64_t mdelay = cxt->delay_ns;
+
+			do_div(mdelay, 1000000);
+			atomic_set(&cxt->delay, mdelay);
+			/* the first sensor start polling timer */
+			if (cxt->is_polling_run == false) {
+				cxt->is_polling_run = true;
+				cxt->is_first_data_after_enable = true;
+				startTempTimer(&cxt->hrTimer,
+					   atomic_read(&cxt->delay), true);
+			}
+			pr_debug("temp set polling delay %d ms\n",
+				 atomic_read(&cxt->delay));
+		}
+		pr_debug("TEMP batch done\n");
+	}
+	return 0;
+}
 #endif
+
 static ssize_t baro_store_active(struct device *dev,
 				 struct device_attribute *attr, const char *buf,
 				 size_t count)
@@ -294,6 +526,42 @@ err_out:
 		return count;
 }
 
+static ssize_t temp_store_active(struct device *dev,
+				 struct device_attribute *attr, const char *buf,
+				 size_t count)
+{
+	struct temp_context *cxt = temp_context_obj;
+	int err = 0;
+
+	pr_debug("%s buf=%s\n", __func__, buf);
+	mutex_lock(&temp_context_obj->temp_op_mutex);
+	if (!strncmp(buf, "1", 1))
+		cxt->enable = 1;
+	else if (!strncmp(buf, "0", 1))
+		cxt->enable = 0;
+	else {
+		pr_err("%s error !!\n", __func__);
+		err = -1;
+		goto err_out;
+	}
+#if defined(CONFIG_NANOHUB)
+	err = cxt->temp_ctl.enable_nodata(cxt->enable);
+	if (err) {
+		pr_err("temp turn on power err = %d\n", err);
+		goto err_out;
+	}
+#else
+	err = temp_enable_and_batch();
+#endif
+err_out:
+	mutex_unlock(&temp_context_obj->temp_op_mutex);
+	pr_debug("%s done\n", __func__);
+	if (err)
+		return err;
+	else
+		return count;
+}
+
 /*----------------------------------------------------------------------------*/
 static ssize_t baro_show_active(struct device *dev,
 				struct device_attribute *attr, char *buf)
@@ -307,6 +575,20 @@ static ssize_t baro_show_active(struct device *dev,
 	pr_debug("baro vender_div value: %d\n", div);
 	return snprintf(buf, PAGE_SIZE, "%d\n", div);
 }
+
+static ssize_t temp_show_active(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct temp_context *cxt = NULL;
+	int div;
+
+	cxt = temp_context_obj;
+	div = cxt->temp_data.vender_div;
+
+	pr_debug("temp vender_div value: %d\n", div);
+	return snprintf(buf, PAGE_SIZE, "%d\n", div);
+}
+
 
 static ssize_t baro_store_batch(struct device *dev,
 				struct device_attribute *attr, const char *buf,
@@ -341,7 +623,46 @@ static ssize_t baro_store_batch(struct device *dev,
 		return count;
 }
 
+static ssize_t temp_store_batch(struct device *dev,
+				struct device_attribute *attr, const char *buf,
+				size_t count)
+{
+	struct temp_context *cxt = temp_context_obj;
+	int handle = 0, flag = 0, err = 0;
+
+	err = sscanf(buf, "%d,%d,%lld,%lld", &handle, &flag, &cxt->delay_ns,
+		     &cxt->latency_ns);
+	if (err != 4) {
+		pr_err("grav_store_batch param error: err = %d\n", err);
+		return -1;
+	}
+
+	mutex_lock(&temp_context_obj->temp_op_mutex);
+#if defined(CONFIG_NANOHUB)
+	if (cxt->temp_ctl.is_support_batch)
+		err = cxt->temp_ctl.batch(0, cxt->delay_ns, cxt->latency_ns);
+	else
+		err = cxt->temp_ctl.batch(0, cxt->delay_ns, 0);
+	if (err)
+		pr_err("temp set batch(ODR) err %d\n", err);
+#else
+	err = temp_enable_and_batch();
+#endif
+	mutex_unlock(&temp_context_obj->temp_op_mutex);
+	pr_debug("%s done: %d\n", __func__, cxt->is_batch_enable);
+	if (err)
+		return err;
+	else
+		return count;
+}
+
 static ssize_t baro_show_batch(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", 0);
+}
+
+static ssize_t temp_show_batch(struct device *dev,
 			       struct device_attribute *attr, char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%d\n", 0);
@@ -376,13 +697,81 @@ static ssize_t baro_store_flush(struct device *dev,
 		return count;
 }
 
+static ssize_t temp_store_flush(struct device *dev,
+				struct device_attribute *attr, const char *buf,
+				size_t count)
+{
+	struct temp_context *cxt = NULL;
+	int handle = 0, err = 0;
+
+	err = kstrtoint(buf, 10, &handle);
+	if (err != 0)
+		pr_err("%s param error: err = %d\n", __func__, err);
+
+	pr_debug("%s param: handle %d\n", __func__, handle);
+
+	mutex_lock(&temp_context_obj->temp_op_mutex);
+	cxt = temp_context_obj;
+	if (cxt->temp_ctl.flush != NULL)
+		err = cxt->temp_ctl.flush();
+	else
+		pr_err(
+			"TEMPERATURE DRIVER OLD ARCHITECTURE DON'T SUPPORT TEMPERATURE COMMON VERSION FLUSH\n");
+	if (err < 0)
+		pr_err("temp enable flush err %d\n", err);
+	mutex_unlock(&temp_context_obj->temp_op_mutex);
+	if (err)
+		return err;
+	else
+		return count;
+}
+
 static ssize_t baro_show_flush(struct device *dev,
 			       struct device_attribute *attr, char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%d\n", 0);
 }
 
+static ssize_t temp_show_flush(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", 0);
+}
+
+static ssize_t baro_store_cali(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	struct baro_context *cxt = NULL;
+	int err = 0;
+	int32_t cali_buf[2] = {0};
+
+	err = sscanf(buf, "%d,%d", &cali_buf[0], &cali_buf[1]);
+	if (err != 2) {
+		pr_err("%s sscanf param error:%d\n", __func__, err);
+		return -1;
+	}
+
+	mutex_lock(&baro_context_obj->baro_op_mutex);
+	cxt = baro_context_obj;
+	if (cxt->baro_ctl.set_cali != NULL)
+		err = cxt->baro_ctl.set_cali((int8_t *)cali_buf, count);
+	else
+		pr_err("DON'T SUPPORT BARO COMMONVERSION CALI\n");
+	if (err < 0)
+		pr_err("baro set cali err %d\n", err);
+	mutex_unlock(&baro_context_obj->baro_op_mutex);
+
+	return count;
+}
+
 static ssize_t baro_show_devnum(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", 0);
+}
+
+static ssize_t temp_show_devnum(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%d\n", 0);
@@ -529,11 +918,13 @@ DEVICE_ATTR(baroactive, 0644, baro_show_active, baro_store_active);
 DEVICE_ATTR(barobatch, 0644, baro_show_batch, baro_store_batch);
 DEVICE_ATTR(baroflush, 0644, baro_show_flush, baro_store_flush);
 DEVICE_ATTR(barodevnum, 0644, baro_show_devnum, NULL);
+DEVICE_ATTR(barocali, 0644, NULL, baro_store_cali);
 
 static struct attribute *baro_attributes[] = {
 	&dev_attr_baroactive.attr,
 	&dev_attr_barobatch.attr,
 	&dev_attr_baroflush.attr,
+	&dev_attr_barocali.attr,
 	&dev_attr_barodevnum.attr,
 	NULL
 };
@@ -541,6 +932,68 @@ static struct attribute *baro_attributes[] = {
 static struct attribute_group baro_attribute_group = {
 	.attrs = baro_attributes
 };
+
+/** temperature device attr */
+static int temperature_open(struct inode *inode, struct file *file)
+{
+	nonseekable_open(inode, file);
+	return 0;
+}
+
+static ssize_t temperature_read(struct file *file, char __user *buffer,
+			     size_t count, loff_t *ppos)
+{
+	ssize_t read_cnt = 0;
+
+	read_cnt = sensor_event_read(temp_context_obj->mdev.minor, file, buffer,
+				     count, ppos);
+
+	return read_cnt;
+}
+
+static unsigned int temperature_poll(struct file *file, poll_table *wait)
+{
+	return sensor_event_poll(temp_context_obj->mdev.minor, file, wait);
+}
+
+static const struct file_operations temperature_fops = {
+	.owner = THIS_MODULE,
+	.open = temperature_open,
+	.read = temperature_read,
+	.poll = temperature_poll,
+};
+
+static int temp_misc_init(struct temp_context *cxt)
+{
+	int err = 0;
+
+	cxt->mdev.minor = ID_AMBIENT_TEMPERATURE;
+	cxt->mdev.name = TEMP_MISC_DEV_NAME;
+	cxt->mdev.fops = &temperature_fops;
+	err = sensor_attr_register(&cxt->mdev);
+	if (err)
+		pr_err("unable to register temp misc device!!\n");
+
+	return err;
+}
+
+DEVICE_ATTR(tempactive, 0644, temp_show_active, temp_store_active);
+DEVICE_ATTR(tempbatch, 0644, temp_show_batch, temp_store_batch);
+DEVICE_ATTR(tempflush, 0644, temp_show_flush, temp_store_flush);
+DEVICE_ATTR(tempdevnum, 0644, temp_show_devnum, NULL);
+
+static struct attribute *temp_attributes[] = {
+	&dev_attr_tempactive.attr,
+	&dev_attr_tempbatch.attr,
+	&dev_attr_tempflush.attr,
+	&dev_attr_tempdevnum.attr,
+	NULL
+};
+
+static struct attribute_group temp_attribute_group = {
+	.attrs = temp_attributes
+};
+
 
 int baro_register_data_path(struct baro_data_path *data)
 {
@@ -559,6 +1012,23 @@ int baro_register_data_path(struct baro_data_path *data)
 	return 0;
 }
 
+int temp_register_data_path(struct temp_data_path *data)
+{
+	struct temp_context *cxt = NULL;
+
+	cxt = temp_context_obj;
+	cxt->temp_data.get_data = data->get_data;
+	cxt->temp_data.vender_div = data->vender_div;
+	cxt->temp_data.get_raw_data = data->get_raw_data;
+	pr_debug("temp register data path vender_div: %d\n",
+		 cxt->temp_data.vender_div);
+	if (cxt->temp_data.get_data == NULL) {
+		pr_debug("temp register data path fail\n");
+		return -1;
+	}
+	return 0;
+}
+
 int baro_register_control_path(struct baro_control_path *ctl)
 {
 	struct baro_context *cxt = NULL;
@@ -570,6 +1040,7 @@ int baro_register_control_path(struct baro_control_path *ctl)
 	cxt->baro_ctl.enable_nodata = ctl->enable_nodata;
 	cxt->baro_ctl.batch = ctl->batch;
 	cxt->baro_ctl.flush = ctl->flush;
+	cxt->baro_ctl.set_cali = ctl->set_cali;
 	cxt->baro_ctl.is_support_batch = ctl->is_support_batch;
 	cxt->baro_ctl.is_report_input_direct = ctl->is_report_input_direct;
 	cxt->baro_ctl.is_support_batch = ctl->is_support_batch;
@@ -600,6 +1071,47 @@ int baro_register_control_path(struct baro_control_path *ctl)
 	return 0;
 }
 
+int temp_register_control_path(struct temp_control_path *ctl)
+{
+	struct temp_context *cxt = NULL;
+	int err = 0;
+
+	cxt = temp_context_obj;
+	cxt->temp_ctl.set_delay = ctl->set_delay;
+	cxt->temp_ctl.open_report_data = ctl->open_report_data;
+	cxt->temp_ctl.enable_nodata = ctl->enable_nodata;
+	cxt->temp_ctl.batch = ctl->batch;
+	cxt->temp_ctl.flush = ctl->flush;
+	cxt->temp_ctl.is_support_batch = ctl->is_support_batch;
+	cxt->temp_ctl.is_report_input_direct = ctl->is_report_input_direct;
+	cxt->temp_ctl.is_support_batch = ctl->is_support_batch;
+	cxt->temp_ctl.is_use_common_factory = ctl->is_use_common_factory;
+
+	if (cxt->temp_ctl.set_delay == NULL ||
+	    cxt->temp_ctl.open_report_data == NULL ||
+	    cxt->temp_ctl.enable_nodata == NULL) {
+		pr_debug("temp register control path fail\n");
+		return -1;
+	}
+
+	/* add misc dev for sensor hal control cmd */
+	err = temp_misc_init(temp_context_obj);
+	if (err) {
+		pr_err("unable to register temp misc device!!\n");
+		return -2;
+	}
+	err = sysfs_create_group(&temp_context_obj->mdev.this_device->kobj,
+				 &temp_attribute_group);
+	if (err < 0) {
+		pr_err("unable to create temp attribute file\n");
+		return -3;
+	}
+
+	kobject_uevent(&temp_context_obj->mdev.this_device->kobj, KOBJ_ADD);
+
+	return 0;
+}
+
 int baro_data_report(int value, int status, int64_t nt)
 {
 	struct sensor_event event;
@@ -616,6 +1128,35 @@ int baro_data_report(int value, int status, int64_t nt)
 	return err;
 }
 
+int temp_data_report(int value, int status, int64_t nt)
+{
+	struct sensor_event event;
+	int err = 0;
+
+	memset(&event, 0, sizeof(struct sensor_event));
+
+	event.flush_action = DATA_ACTION;
+	event.time_stamp = nt;
+	event.word[0] = value;
+	event.status = status;
+	pr_debug("temp_data_report value=%d, status=%d, TS=%lld\n", value, status, nt);
+
+	err = sensor_input_event(temp_context_obj->mdev.minor, &event);
+	return err;
+}
+
+int baro_cali_report(int32_t *data)
+{
+    struct sensor_event event;
+
+    memset(&event, 0, sizeof(struct sensor_event));
+
+    event.flush_action = CALI_ACTION;
+    event.word[0] = data[0];
+    event.word[1] = data[1];
+    return sensor_input_event(baro_context_obj->mdev.minor, &event);
+}
+
 int baro_flush_report(void)
 {
 	struct sensor_event event;
@@ -629,6 +1170,19 @@ int baro_flush_report(void)
 	return err;
 }
 
+int temp_flush_report(void)
+{
+	struct sensor_event event;
+	int err = 0;
+
+	memset(&event, 0, sizeof(struct sensor_event));
+
+	pr_debug_ratelimited("flush\n");
+	event.flush_action = FLUSH_ACTION;
+	err = sensor_input_event(temp_context_obj->mdev.minor, &event);
+	return err;
+}
+
 static int baro_probe(void)
 {
 	int err;
@@ -637,6 +1191,13 @@ static int baro_probe(void)
 
 	baro_context_obj = baro_context_alloc_object();
 	if (!baro_context_obj) {
+		err = -ENOMEM;
+		pr_err("unable to allocate devobj!\n");
+		goto exit_alloc_data_failed;
+	}
+
+	temp_context_obj = temp_context_alloc_object();
+	if (!temp_context_obj) {
 		err = -ENOMEM;
 		pr_err("unable to allocate devobj!\n");
 		goto exit_alloc_data_failed;
@@ -655,6 +1216,8 @@ static int baro_probe(void)
 real_driver_init_fail:
 	kfree(baro_context_obj);
 	baro_context_obj = NULL;
+	kfree(temp_context_obj);
+	temp_context_obj = NULL;
 exit_alloc_data_failed:
 
 	pr_debug("%s----fail !!!\n", __func__);
@@ -669,11 +1232,18 @@ static int baro_remove(void)
 
 	sysfs_remove_group(&baro_context_obj->mdev.this_device->kobj,
 			   &baro_attribute_group);
+	sysfs_remove_group(&temp_context_obj->mdev.this_device->kobj,
+			   &temp_attribute_group);
 
 	err = sensor_attr_deregister(&baro_context_obj->mdev);
 	if (err)
 		pr_err("misc_deregister fail: %d\n", err);
 	kfree(baro_context_obj);
+
+	err = sensor_attr_deregister(&temp_context_obj->mdev);
+	if (err)
+		pr_err("misc_deregister fail: %d\n", err);
+	kfree(temp_context_obj);
 
 	return 0;
 }

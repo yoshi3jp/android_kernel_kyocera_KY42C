@@ -11,6 +11,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2021 KYOCERA Corporation
+ */
 
 
 #ifndef SCP_SENSOR_HUB_H
@@ -163,6 +167,12 @@ typedef struct {
 } pressure_vec_t;
 
 typedef struct {
+	uint32_t light;
+	uint32_t clight;
+	uint32_t light_raw_data;
+} light_vec_t;
+
+typedef struct {
 	uint32_t steps;
 	int32_t oneshot;
 } proximity_vec_t;
@@ -244,7 +254,7 @@ struct data_unit_t {
 		sensor_vec_t orientation_t;
 		sensor_vec_t pdr_event;
 
-		int32_t light;
+		light_vec_t light_t;
 		proximity_vec_t proximity_t;
 		int32_t temperature;
 		pressure_vec_t pressure_t;
@@ -374,6 +384,7 @@ typedef enum {
 	CUST_ACTION_SHOW_ALSVAL,
 	CUST_ACTION_SET_FACTORY,
 	CUST_ACTION_GET_SENSOR_INFO,
+	CUST_ACTION_SET_NV_VALUE,
 } CUST_ACTION;
 
 typedef struct {
@@ -434,6 +445,11 @@ typedef struct {
 	};
 } SCP_SENSOR_HUB_GET_RAW_DATA;
 
+typedef struct {
+	CUST_ACTION action;
+	uint32_t nvValue[8];
+} SCP_SENSOR_HUB_SET_NV_VALUE;
+
 struct mag_dev_info_t {
 	char libname[16];
 	int8_t layout;
@@ -443,6 +459,7 @@ struct mag_dev_info_t {
 struct sensorInfo_t {
 	char name[16];
 	struct mag_dev_info_t mag_dev_info;
+	uint8_t deviceId;
 };
 
 struct scp_sensor_hub_get_sensor_info {
@@ -477,6 +494,7 @@ typedef struct {
 		SCP_SENSOR_HUB_SHOW_ALSVAL showAlsval;
 		SCP_SENSOR_HUB_SET_FACTORY	setFactory;
 		struct scp_sensor_hub_get_sensor_info getInfo;
+		SCP_SENSOR_HUB_SET_NV_VALUE setNvvalue;
 	};
 } SCP_SENSOR_HUB_SET_CUST_REQ;
 

@@ -53,6 +53,7 @@ struct accelhub_ipi_data {
 	bool android_enable;
 	struct completion calibration_done;
 	struct completion selftest_done;
+	struct sensorInfo_t accel_info;
 };
 
 static struct acc_init_info accelhub_init_info;
@@ -354,6 +355,36 @@ static ssize_t store_test_cali(struct device_driver *ddri, const char *buf,
 	return tCount;
 }
 
+static int accelhub_ReadDeviceId(char *buf, int bufsize)
+{
+	u8 databuf[10];
+	struct accelhub_ipi_data *obj = obj_ipi_data;
+	int err = 0;
+
+	memset(databuf, 0, sizeof(u8) * 10);
+
+	if ((buf == NULL) || (bufsize <= 30))
+		return -1;
+
+	err = sensor_set_cmd_to_hub(ID_ACCELEROMETER, CUST_ACTION_GET_SENSOR_INFO, &obj->accel_info);
+	if (err < 0) {
+		pr_err("set_cmd_to_hub fail, (ID: %d),(action: %d)\n",
+			ID_ACCELEROMETER, CUST_ACTION_GET_SENSOR_INFO);
+		return -1;
+	}
+
+	sprintf(buf, "0x%x", obj->accel_info.deviceId);
+	return 0;
+}
+
+static ssize_t show_deviceid(struct device_driver *ddri, char *buf)
+{
+	char strbuf[ACCELHUB_BUFSIZE];
+
+	accelhub_ReadDeviceId(strbuf, ACCELHUB_BUFSIZE);
+	return snprintf(buf, PAGE_SIZE, "%s\n", strbuf);
+}
+
 static DRIVER_ATTR(chipinfo, 0444, show_chipinfo_value, NULL);
 static DRIVER_ATTR(sensordata, 0444, show_sensordata_value, NULL);
 static DRIVER_ATTR(cali, 0644, show_cali_value, NULL);
@@ -361,6 +392,7 @@ static DRIVER_ATTR(trace, 0644, NULL, store_trace_value);
 static DRIVER_ATTR(orientation, 0644, show_chip_orientation,
 		   store_chip_orientation);
 static DRIVER_ATTR(test_cali, 0644, NULL, store_test_cali);
+static DRIVER_ATTR(deviceid, 0444, show_deviceid, NULL);
 
 static struct driver_attribute *accelhub_attr_list[] = {
 	&driver_attr_chipinfo,   /*chip information */
@@ -368,6 +400,7 @@ static struct driver_attribute *accelhub_attr_list[] = {
 	&driver_attr_cali,       /*show calibration data */
 	&driver_attr_trace,      /*trace log */
 	&driver_attr_orientation, &driver_attr_test_cali,
+	&driver_attr_deviceid,
 };
 
 static int accelhub_create_attr(struct device_driver *driver)

@@ -1,4 +1,7 @@
 /*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2022 KYOCERA Corporation
+ *
  * Copyright (C) 2016 MediaTek Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -193,6 +196,7 @@
 #define BARO_PL_DEV_NAME "m_baro_pl"
 #define BARO_INPUTDEV_NAME "m_baro_input"
 #define BARO_MISC_DEV_NAME "m_baro_misc"
+#define TEMP_MISC_DEV_NAME "m_temp_misc"
 #define HMDY_PL_DEV_NAME "m_hmdy_pl"
 #define HMDY_INPUTDEV_NAME "m_hmdy_input"
 #define HMDY_MISC_DEV_NAME "m_hmdy_misc"

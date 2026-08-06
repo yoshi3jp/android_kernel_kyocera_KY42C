@@ -10,6 +10,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2020 KYOCERA Corporation
+ */
 
 
 #define pr_fmt(fmt) "[ALS/PS] " fmt
@@ -35,7 +39,7 @@ struct alspshub_ipi_data {
 
 	/*data */
 	u16		als;
-	u8		ps;
+	u16		ps;
 	int		ps_cali;
 	atomic_t	als_cali;
 	atomic_t	ps_thd_val_high;
@@ -47,6 +51,8 @@ struct alspshub_ipi_data {
 	bool als_android_enable;
 	bool ps_android_enable;
 	struct wakeup_source ps_wake_lock;
+	struct sensorInfo_t alsps_info;
+	u16 	als_nv[16];
 };
 
 static struct alspshub_ipi_data *obj_ipi_data;
@@ -80,7 +86,7 @@ enum {
 	CMC_TRC_DEBUG = 0x8000,
 } CMC_TRC;
 
-long alspshub_read_ps(u8 *ps)
+long alspshub_read_ps(u16 *ps)
 {
 	long res;
 	struct alspshub_ipi_data *obj = obj_ipi_data;
@@ -112,7 +118,41 @@ long alspshub_read_als(u16 *als)
 			ID_LIGHT);
 		return -1;
 	}
-	*als = data_t.light;
+	*als = data_t.light_t.light;
+
+	return 0;
+}
+
+long alspshub_read_als_c(u16 *als)
+{
+	long res = 0;
+	struct data_unit_t data_t;
+
+	res = sensor_get_data_from_hub(ID_LIGHT, &data_t);
+	if (res < 0) {
+		*als = -1;
+		pr_err_ratelimited("sensor_get_data_from_hub fail, (ID: %d)\n",
+			ID_LIGHT);
+		return -1;
+	}
+	*als = data_t.light_t.clight;
+
+        return 0;
+}
+
+long alspshub_read_als_raw(u16 *als)
+{
+	long res = 0;
+	struct data_unit_t data_t;
+
+	res = sensor_get_data_from_hub(ID_LIGHT, &data_t);
+	if (res < 0) {
+		*als = -1;
+		pr_err_ratelimited("sensor_get_data_from_hub fail, (ID: %d)\n",
+				ID_LIGHT);
+		return -1;
+	}
+	*als = data_t.light_t.light_raw_data;
 
 	return 0;
 }
@@ -175,6 +215,68 @@ static ssize_t alspshub_show_als(struct device_driver *ddri, char *buf)
 		return snprintf(buf, PAGE_SIZE, "0x%04X\n", obj->als);
 }
 
+static ssize_t alspshub_c_show(struct device_driver *ddri, char *buf)
+{
+	int res = 0;
+	struct alspshub_ipi_data *obj = obj_ipi_data;
+
+	if (!obj) {
+		pr_err("obj_ipi_data is null!!\n");
+		return 0;
+	}
+	res = alspshub_read_als_c(&obj->als);
+	if (res)
+		return snprintf(buf, PAGE_SIZE, "ERROR: %d\n", res);
+	else
+		return snprintf(buf, PAGE_SIZE, "0x%04X\n", obj->als);
+}
+
+static ssize_t alspshub_raw_show(struct device_driver *ddri, char *buf)
+{
+	int res = 0;
+	struct alspshub_ipi_data *obj = obj_ipi_data;
+
+	if (!obj) {
+		pr_err("obj_ipi_data is null!!\n");
+		return 0;
+	}
+	res = alspshub_read_als_raw(&obj->als);
+	if (res)
+		return snprintf(buf, PAGE_SIZE, "ERROR: %d\n", res);
+	else
+		return snprintf(buf, PAGE_SIZE, "0x%04X\n", obj->als);
+}
+
+static int alspshub_ReadDeviceId(char *buf, int bufsize)
+{
+	u8 databuf[10];
+	struct alspshub_ipi_data *obj = obj_ipi_data;
+	int err = 0;
+
+	memset(databuf, 0, sizeof(u8) * 10);
+
+	if ((buf == NULL) || (bufsize <= 30))
+		return -1;
+
+	err = sensor_set_cmd_to_hub(ID_LIGHT, CUST_ACTION_GET_SENSOR_INFO, &obj->alsps_info);
+	if (err < 0) {
+		pr_err("set_cmd_to_hub fail, (ID: %d),(action: %d)\n",
+			ID_LIGHT, CUST_ACTION_GET_SENSOR_INFO);
+		return -1;
+	}
+
+	sprintf(buf, "0x%x", obj->alsps_info.deviceId);
+	return 0;
+}
+
+static ssize_t deviceid_show(struct device_driver *ddri, char *buf)
+{
+	char strbuf[256];
+
+	alspshub_ReadDeviceId(strbuf, sizeof(strbuf));
+	return snprintf(buf, PAGE_SIZE, "%s\n", strbuf);
+}
+
 static ssize_t alspshub_show_ps(struct device_driver *ddri, char *buf)
 {
 	ssize_t res = 0;
@@ -234,12 +336,16 @@ static ssize_t alspshub_show_alsval(struct device_driver *ddri, char *buf)
 }
 
 static DRIVER_ATTR(als, 0644, alspshub_show_als, NULL);
+static DRIVER_ATTR(als_c, 0644, alspshub_c_show, NULL);
+static DRIVER_ATTR(als_raw, 0644, alspshub_raw_show, NULL);
+static DRIVER_ATTR(deviceid, 0644, deviceid_show, NULL);
 static DRIVER_ATTR(ps, 0644, alspshub_show_ps, NULL);
 static DRIVER_ATTR(alslv, 0644, alspshub_show_alslv, NULL);
 static DRIVER_ATTR(alsval, 0644, alspshub_show_alsval, NULL);
 static DRIVER_ATTR(trace, 0644, alspshub_show_trace,
 					alspshub_store_trace);
 static DRIVER_ATTR(reg, 0644, alspshub_show_reg, NULL);
+
 static struct driver_attribute *alspshub_attr_list[] = {
 	&driver_attr_als,
 	&driver_attr_ps,
@@ -247,6 +353,9 @@ static struct driver_attribute *alspshub_attr_list[] = {
 	&driver_attr_alslv,
 	&driver_attr_alsval,
 	&driver_attr_reg,
+	&driver_attr_deviceid,
+	&driver_attr_als_c,
+	&driver_attr_als_raw,
 };
 
 static int alspshub_create_attr(struct device_driver *driver)
@@ -357,7 +466,7 @@ static int als_recv_data(struct data_unit_t *event, void *reserved)
 		err = als_flush_report();
 	else if ((event->flush_action == DATA_ACTION) &&
 			READ_ONCE(obj->als_android_enable) == true)
-		err = als_data_report(event->light,
+		err = als_data_report(event->light_t.light,
 			SENSOR_STATUS_ACCURACY_MEDIUM);
 	else if (event->flush_action == CALI_ACTION) {
 		spin_lock(&calibration_lock);
@@ -418,7 +527,7 @@ static int alshub_factory_get_data(int32_t *data)
 	err = sensor_get_data_from_hub(ID_LIGHT, &data_t);
 	if (err < 0)
 		return -1;
-	*data = data_t.light;
+	*data = data_t.light_t.light;
 	return 0;
 }
 static int alshub_factory_get_raw_data(int32_t *data)
@@ -687,6 +796,39 @@ static int als_set_cali(uint8_t *data, uint8_t count)
 	spin_unlock(&calibration_lock);
 	return sensor_cfg_to_hub(ID_LIGHT, data, count);
 }
+static int als_set_nv(uint32_t *data,uint32_t count)
+{
+	int32_t *buf = data;
+	struct alspshub_ipi_data *obj = obj_ipi_data;
+	int err = 0;
+	pr_debug("NV: buf = %x,%x,%x,%x,%x,  %x,%x,%x,%x,%x,  %x,%x,%x,%x,%x\n",
+		buf[0],buf[1],buf[2],buf[3],buf[4],
+		buf[5],buf[6],buf[7],buf[8],buf[9],
+		buf[10],buf[11],buf[12],buf[13],buf[14]);
+
+	obj->als_nv[0]= (u16)buf[0];
+	obj->als_nv[1]= (u16)buf[1];
+	obj->als_nv[2]= (u16)buf[2];
+	obj->als_nv[3]= (u16)buf[3];
+	obj->als_nv[4]= (u16)buf[4];
+
+	obj->als_nv[5]= (u16)buf[5];
+	obj->als_nv[6]= (u16)buf[6];
+	obj->als_nv[7]= (u16)buf[7];
+	obj->als_nv[8]= (u16)buf[8];
+	obj->als_nv[9]= (u16)buf[9];
+
+	obj->als_nv[10]= (u16)buf[10];
+	obj->als_nv[11]= (u16)buf[11];
+	obj->als_nv[12]= (u16)buf[12];
+	obj->als_nv[13]= (u16)buf[13];
+	obj->als_nv[14]= (u16)buf[14];
+	obj->als_nv[15]= 0x0e0f;
+
+	err = sensor_set_cmd_to_hub(ID_LIGHT, CUST_ACTION_SET_NV_VALUE, &obj->als_nv);
+
+	return err;
+}
 
 static int rgbw_enable(int en)
 {
@@ -723,7 +865,7 @@ static int als_get_data(int *value, int *status)
 		pr_err("sensor_get_data_from_hub fail!\n");
 	} else {
 		time_stamp = data.time_stamp;
-		*value = data.light;
+		*value = data.light_t.light;
 		*status = SENSOR_STATUS_ACCURACY_MEDIUM;
 	}
 
@@ -936,6 +1078,7 @@ static int alspshub_probe(struct platform_device *pdev)
 	als_ctl.batch = als_batch;
 	als_ctl.flush = als_flush;
 	als_ctl.set_cali = als_set_cali;
+	als_ctl.set_nv = als_set_nv;
 	als_ctl.rgbw_enable = rgbw_enable;
 	als_ctl.rgbw_batch = rgbw_batch;
 	als_ctl.rgbw_flush = rgbw_flush;

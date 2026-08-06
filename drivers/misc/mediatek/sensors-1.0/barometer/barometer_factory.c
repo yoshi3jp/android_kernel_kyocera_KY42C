@@ -1,4 +1,7 @@
 /*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2022 KYOCERA Corporation
+ *
  * Copyright (C) 2016 MediaTek Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -105,6 +108,20 @@ static long baro_factory_unlocked_ioctl(struct file *file, unsigned int cmd,
 		}
 		return 0;
 	case BAROMETER_GET_TEMP_DATA:
+		if (baro_factory.fops != NULL &&
+		    baro_factory.fops->temp_get_data != NULL) {
+			err = baro_factory.fops->temp_get_data(&data);
+			if (err < 0) {
+				pr_err(
+					"BAROMETER_GET_TEMP_DATA read data fail!\n");
+				return -EINVAL;
+			}
+			if (copy_to_user(ptr, &data, sizeof(data)))
+				return -EFAULT;
+		} else {
+			pr_err("BAROMETER_GET_TEMP_DATA NULL\n");
+			return -EINVAL;
+		}
 		return 0;
 	default:
 		pr_err("unknown IOCTL: 0x%08x\n", cmd);

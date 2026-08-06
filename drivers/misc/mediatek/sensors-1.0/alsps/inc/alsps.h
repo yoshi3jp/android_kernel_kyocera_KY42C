@@ -10,6 +10,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2021 KYOCERA Corporation
+ */
 
 #ifndef __ALSPS_H__
 #define __ALSPS_H__
@@ -68,6 +72,7 @@ struct als_control_path {
 		int64_t maxBatchReportLatencyNs);
 	int (*flush)(void);	    /* open data rerport to HAL */
 	int (*set_cali)(uint8_t *data, uint8_t count);
+	int (*set_nv)(uint32_t *data, uint32_t count);
 	int (*rgbw_enable)(int en);
 	int (*rgbw_batch)(int flag, int64_t samplingPeriodNs,
 		int64_t maxBatchReportLatencyNs);

@@ -10,6 +10,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2021 KYOCERA Corporation
+ */
 
 #define pr_fmt(fmt) "<ALS/PS> " fmt
 
@@ -624,6 +628,31 @@ static ssize_t als_store_cali(struct device *dev,
 	return count;
 }
 
+static ssize_t als_store_nv(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct alsps_context *cxt = NULL;
+	int err = 0;
+	uint32_t *nv_buf = NULL;
+
+	pr_debug("als_store_nv start !!\n");
+
+	nv_buf = vzalloc(count);
+	if (!nv_buf)
+		return -ENOMEM;
+	memcpy(nv_buf, buf, count);
+
+	mutex_lock(&alsps_context_obj->alsps_op_mutex);
+	cxt = alsps_context_obj;
+	if (cxt->als_ctl.set_nv != NULL)
+		err = cxt->als_ctl.set_nv(nv_buf, count);
+	if (err < 0)
+		pr_err("als set nv err %d\n", err);
+	mutex_unlock(&alsps_context_obj->alsps_op_mutex);
+	vfree(nv_buf);
+	return count;
+}
+
 #if !defined(CONFIG_NANOHUB) || !defined(CONFIG_MTK_ALSPSHUB)
 static int ps_enable_and_batch(void)
 {
@@ -984,6 +1013,7 @@ DEVICE_ATTR(alsbatch, 0644, als_show_batch, als_store_batch);
 DEVICE_ATTR(alsflush, 0644, als_show_flush, als_store_flush);
 DEVICE_ATTR(alsdevnum, 0644, als_show_devnum, NULL);
 DEVICE_ATTR(alscali, 0644, NULL, als_store_cali);
+DEVICE_ATTR(als_nv, 0644, NULL, als_store_nv);
 DEVICE_ATTR(psactive, 0644, ps_show_active, ps_store_active);
 DEVICE_ATTR(psbatch, 0644, ps_show_batch, ps_store_batch);
 DEVICE_ATTR(psflush, 0644, ps_show_flush, ps_store_flush);
@@ -996,6 +1026,7 @@ static struct attribute *als_attributes[] = {
 	&dev_attr_alsflush.attr,
 	&dev_attr_alsdevnum.attr,
 	&dev_attr_alscali.attr,
+	&dev_attr_als_nv.attr,
 	NULL
 };
 
@@ -1146,6 +1177,7 @@ int als_register_control_path(struct als_control_path *ctl)
 	cxt->als_ctl.batch = ctl->batch;
 	cxt->als_ctl.flush = ctl->flush;
 	cxt->als_ctl.set_cali = ctl->set_cali;
+	cxt->als_ctl.set_nv = ctl->set_nv;
 	cxt->als_ctl.rgbw_enable = ctl->rgbw_enable;
 	cxt->als_ctl.rgbw_batch = ctl->rgbw_batch;
 	cxt->als_ctl.rgbw_flush = ctl->rgbw_flush;

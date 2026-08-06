@@ -1,4 +1,7 @@
 /*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2022 KYOCERA Corporation
+ *
  * Copyright (C) 2016 MediaTek Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -44,6 +47,8 @@ struct baro_factory_fops {
 	int (*set_cali)(int32_t offset);
 	int (*get_cali)(int32_t *offset);
 	int (*do_self_test)(void);
+
+	int (*temp_get_data)(int32_t *data);
 };
 
 struct baro_factory_public {

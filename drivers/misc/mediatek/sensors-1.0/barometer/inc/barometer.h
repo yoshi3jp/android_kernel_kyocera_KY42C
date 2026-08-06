@@ -1,4 +1,7 @@
 /*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2022 KYOCERA Corporation
+ *
  * Copyright (C) 2016 MediaTek Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -65,13 +68,33 @@ struct baro_control_path {
 	int (*batch)(int flag, int64_t samplingPeriodNs,
 		     int64_t maxBatchReportLatencyNs);
 	int (*flush)(void); /* open data rerport to HAL */
+	int (*set_cali)(uint8_t *data, uint8_t count);
 	int (*baroess_data_fifo)(void);
 	bool is_report_input_direct;
 	bool is_support_batch;
 	bool is_use_common_factory;
 };
 
+struct temp_control_path {
+	int (*open_report_data)(int open);
+	int (*enable_nodata)(int en);
+	int (*set_delay)(u64 delay);
+	int (*batch)(int flag, int64_t samplingPeriodNs,
+		     int64_t maxBatchReportLatencyNs);
+	int (*flush)(void); /* open data rerport to HAL */
+	int (*access_data_fifo)(void);
+	bool is_report_input_direct;
+	bool is_support_batch;
+	bool is_use_common_factory;
+};
+
 struct baro_data_path {
+	int (*get_data)(int *value, int *status);
+	int (*get_raw_data)(int type, int *value);
+	int vender_div;
+};
+
+struct temp_data_path {
 	int (*get_data)(int *value, int *status);
 	int (*get_raw_data)(int type, int *value);
 	int vender_div;
@@ -86,6 +109,11 @@ struct baro_init_info {
 
 struct baro_data {
 	struct hwm_sensor_data baro_data;
+	int data_updata;
+};
+
+struct temp_data {
+	struct hwm_sensor_data temp_data;
 	int data_updata;
 };
 
@@ -122,10 +150,41 @@ struct baro_context {
 	int64_t latency_ns;
 };
 
+struct temp_context {
+	struct input_dev *idev;
+	struct sensor_attr_t mdev;
+	struct work_struct report;
+	struct mutex temp_op_mutex;
+	atomic_t delay;
+	atomic_t wake;
+	struct timer_list timer;
+	struct hrtimer hrTimer;
+	ktime_t target_ktime;
+	atomic_t trace;
+	struct workqueue_struct *temp_workqueue;
+
+	struct temp_data drv_data;
+	struct temp_control_path temp_ctl;
+	struct temp_data_path temp_data;
+	bool is_first_data_after_enable;
+	bool is_polling_run;
+	bool is_batch_enable;
+	int power;
+	int enable;
+	int64_t delay_ns;
+	int64_t latency_ns;
+};
+
 extern int baro_driver_add(struct baro_init_info *obj);
 extern int baro_data_report(int value, int status, int64_t nt);
 extern int baro_flush_report(void);
+extern int baro_cali_report(int32_t *data);
 extern int baro_register_control_path(struct baro_control_path *ctl);
 extern int baro_register_data_path(struct baro_data_path *data);
+
+extern int temp_data_report(int value, int status, int64_t nt);
+extern int temp_flush_report(void);
+extern int temp_register_control_path(struct temp_control_path *ctl);
+extern int temp_register_data_path(struct temp_data_path *data);
 
 #endif

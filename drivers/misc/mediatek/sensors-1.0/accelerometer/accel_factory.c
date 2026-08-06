@@ -1,4 +1,8 @@
 /*
+ *
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2022 KYOCERA Corporation
+ * 
  * Copyright (C) 2016 MediaTek Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -194,7 +198,7 @@ static long acc_factory_unlocked_ioctl(struct file *file, unsigned int cmd,
 			pr_err("GSENSOR_IOCTL_SELF_TEST NULL\n");
 			return -EINVAL;
 		}
-		return 0;
+		return err;
 	default:
 		pr_err("unknown IOCTL: 0x%08x\n", cmd);
 		return -ENOIOCTLCMD;

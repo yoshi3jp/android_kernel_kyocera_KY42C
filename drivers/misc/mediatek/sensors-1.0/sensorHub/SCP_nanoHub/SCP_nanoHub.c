@@ -1,4 +1,6 @@
 /* SCP sensor hub driver
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2022 KYOCERA Corporation
  *
  * Copyright (C) 2016 MediaTek Inc.
  *
@@ -798,6 +800,9 @@ static void SCP_sensorHub_init_sensor_state(void)
 	mSensorState[SENSOR_TYPE_PRESSURE].sensorType = SENSOR_TYPE_PRESSURE;
 	mSensorState[SENSOR_TYPE_PRESSURE].timestamp_filter = false;
 
+	mSensorState[SENSOR_TYPE_AMBIENT_TEMPERATURE].sensorType = SENSOR_TYPE_AMBIENT_TEMPERATURE;
+	mSensorState[SENSOR_TYPE_AMBIENT_TEMPERATURE].timestamp_filter = false;
+
 	mSensorState[SENSOR_TYPE_ORIENTATION].sensorType =
 		SENSOR_TYPE_ORIENTATION;
 	mSensorState[SENSOR_TYPE_ORIENTATION].timestamp_filter = true;
@@ -1535,7 +1540,9 @@ int sensor_get_data_from_hub(uint8_t sensorType,
 		break;
 	case ID_LIGHT:
 		data->time_stamp = data_t->time_stamp;
-		data->light = data_t->light;
+		data->light_t.light = data_t->light_t.light;
+		data->light_t.clight = data_t->light_t.clight;
+		data->light_t.light_raw_data = data_t->light_t.light_raw_data;
 		break;
 	case ID_PROXIMITY:
 		data->time_stamp = data_t->time_stamp;
@@ -1546,6 +1553,10 @@ int sensor_get_data_from_hub(uint8_t sensorType,
 		data->time_stamp = data_t->time_stamp;
 		data->pressure_t.pressure = data_t->pressure_t.pressure;
 		data->pressure_t.status = data_t->pressure_t.status;
+		break;
+	case ID_AMBIENT_TEMPERATURE:
+		data->time_stamp = data_t->time_stamp;
+		data->temperature = data_t->temperature;
 		break;
 	case ID_GYROSCOPE:
 		data->time_stamp = data_t->time_stamp;
@@ -1742,7 +1753,7 @@ int sensor_set_cmd_to_hub(uint8_t sensorType,
 	CUST_ACTION action, void *data)
 {
 	SCP_SENSOR_HUB_DATA req;
-	int len = 0, err = 0;
+	int len = 0, err = 0,nu =0;
 	SCP_SENSOR_HUB_GET_RAW_DATA *pGetRawData;
 
 	req.get_data_req.sensorType = sensorType;
@@ -1859,6 +1870,18 @@ int sensor_set_cmd_to_hub(uint8_t sensorType,
 				CUST_ACTION_GET_SENSOR_INFO;
 			len = offsetof(SCP_SENSOR_HUB_SET_CUST_REQ, custData)
 				+ sizeof(req.set_cust_req.getInfo);
+			break;
+		case CUST_ACTION_SET_NV_VALUE:
+			req.set_cust_req.setNvvalue.action =
+				CUST_ACTION_SET_NV_VALUE;
+			for(nu = 0; nu < 8; nu++){
+				req.set_cust_req.setNvvalue.nvValue[nu] =
+					(*((uint16_t *) data + 2*nu + 1) | *((uint16_t *) data + 2*nu)  << 16);
+				pr_debug("CUST_ACTION_SET_NV_VALUE[%d] = %x(%dd) \n",
+					nu ,req.set_cust_req.setNvvalue.nvValue[nu],req.set_cust_req.setNvvalue.nvValue[nu]);
+			}
+			len = offsetof(SCP_SENSOR_HUB_SET_CUST_REQ,
+				custData) + sizeof(req.set_cust_req.setNvvalue);
 			break;
 		default:
 			return -1;
