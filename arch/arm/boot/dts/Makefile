@@ -955,6 +955,13 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += \
 dtb-$(CONFIG_ARCH_ZX) += zx296702-ad1.dtb
 dtb-$(CONFIG_ARCH_ASPEED) += aspeed-bmc-opp-palmetto.dtb \
 	aspeed-ast2500-evb.dtb
+dtb-$(CONFIG_KC_PC9359) +=  \
+	mt6761-FLARE00[0001].dtb \
+	mt6761-FLARE04[0400].dtb \
+	mt6761-FLARE04[0410].dtb \
+	mt6761-FLARE04[0430].dtb \
+	mt6761-FLARE05[0500].dtb \
+	mt6761-FLARE05[0510].dtb
 endif
 
 dtstree		:= $(srctree)/$(src)

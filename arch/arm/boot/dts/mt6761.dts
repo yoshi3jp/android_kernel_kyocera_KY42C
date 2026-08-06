@@ -12,6 +12,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2022 KYOCERA Corporation
+ */
 
 /dts-v1/;
 #include <dt-bindings/interrupt-controller/arm-gic.h>
@@ -73,16 +77,6 @@
 					  <&SODI &SODI3 &DPIDLE &SUSPEND>;
 		};
 
-		cpu3: cpu@003 {
-			device_type = "cpu";
-			compatible = "arm,cortex-a53";
-			reg = <0x003>;
-			enable-method = "psci";
-			clock-frequency = <2340000000>;
-			cpu-idle-states = <&STANDBY &MCDI_CPU &MCDI_CLUSTER>,
-					  <&SODI &SODI3 &DPIDLE &SUSPEND>;
-		};
-
 		cpu-map {
 			cluster0 {
 				core0 {
@@ -93,9 +87,6 @@
 				};
 				core2 {
 					cpu = <&cpu2>;
-				};
-				core3 {
-					cpu = <&cpu3>;
 				};
 			};
 		};
@@ -626,7 +617,7 @@
 	};
 
 	touch: touch {
-		compatible = "mediatek,touch";
+//		compatible = "mediatek,touch";
 	};
 
 	accdet: accdet {
@@ -2756,7 +2747,6 @@ mipi_rx_ana_csi0b: mipi_rx_ana_csi0b@11c11000 {
 	lk_charger: lk_charger {
 		compatible = "mediatek,lk_charger";
 		enable_anime;
-		enable_pe_plus;
 		enable_pd20_reset;
 		power_path_support;
 		max_charger_voltage = <6500000>;
@@ -2781,10 +2771,10 @@ mipi_rx_ana_csi0b: mipi_rx_ana_csi0b@11c11000 {
 		compatible = "mediatek,charger";
 		algorithm_name = "SwitchCharging";
 		/* enable_sw_jeita; */
-		enable_pe_plus;
-		enable_pe_2;
-		enable_pe_3;
-		enable_pe_4;
+		/* enable_pe_plus; */
+		/* enable_pe_2; */
+		/* enable_pe_3; */
+		/* enable_pe_4; */
 		enable_type_c;
 		power_path_support;
 		enable_dynamic_mivr;
