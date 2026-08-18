@@ -3765,6 +3765,18 @@ static int cgroup_add_file(struct cgroup_subsys_state *css, struct cgroup *cgrp,
 		spin_unlock_irq(&cgroup_file_kn_lock);
 	}
 
+	/*
+	 * Droidspaces/LXC compatibility: retain prefixed aliases on noprefix roots.
+	 * Android may expose an unprefixed legacy-cgroup filename while LXC-style
+	 * userspace expects the conventional subsystem-prefixed alias.
+	 */
+	if (cft->ss && (cgrp->root->flags & CGRP_ROOT_NOPREFIX) &&
+	    !(cft->flags & CFTYPE_NO_PREFIX)) {
+		snprintf(name, CGROUP_FILE_NAME_MAX, "%s.%s",
+			 cft->ss->name, cft->name);
+		kernfs_create_link(cgrp->kn, name, kn);
+	}
+
 	return 0;
 }
 
