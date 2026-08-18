@@ -1401,7 +1401,6 @@ config UTS_NS
 
 config IPC_NS
 	bool "IPC namespace"
-	depends on (SYSVIPC || POSIX_MQUEUE)
 	default y
 	help
 	  In this namespace tasks work with IPC ids which correspond to
