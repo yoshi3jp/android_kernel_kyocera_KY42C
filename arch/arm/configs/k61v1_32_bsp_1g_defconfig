@@ -498,7 +498,7 @@ CONFIG_NF_CT_NETLINK=y
 CONFIG_NF_NAT_REDIRECT=y
 CONFIG_IP_ADVANCED_ROUTER=y
 CONFIG_IP_MULTIPLE_TABLES=y
-# CONFIG_ANDROID_PARANOID_NETWORK is not set
+CONFIG_ANDROID_PARANOID_NETWORK=y
 
 # CONFIG_USER_NS is not set
 
@@ -506,3 +506,6 @@ CONFIG_IP_MULTIPLE_TABLES=y
 # Stage-3 census: UTS_NS + PID_NS + IPC_NS(stub) retained 509/509
 # stock-module CRC compatibility. NET_NS, extra cgroup controllers,
 # SYSVIPC and POSIX_MQUEUE are intentionally disabled for this profile.
+# Keep CONFIG_ANDROID_PARANOID_NETWORK enabled for Android's legacy
+# AID_NET_RAW/AID_NET_ADMIN capability semantics. The AID_INET socket
+# admission check is relaxed separately in af_inet.c/af_inet6.c.

@@ -67,17 +67,20 @@
 
 #ifdef CONFIG_ANDROID_PARANOID_NETWORK
 #include <linux/android_aid.h>
+#endif
 
-static inline int current_has_network(void)
-{
-	return in_egroup_p(AID_INET) || capable(CAP_NET_RAW);
-}
-#else
+/*
+ * Droidspaces compatibility:
+ *
+ * Allow ordinary AF_INET socket creation regardless of AID_INET
+ * membership. CONFIG_ANDROID_PARANOID_NETWORK remains enabled so
+ * Android's legacy AID_NET_RAW/AID_NET_ADMIN capability semantics
+ * remain available through security/commoncap.c.
+ */
 static inline int current_has_network(void)
 {
 	return 1;
 }
-#endif
 
 #include "ip6_offload.h"
 
