@@ -31,12 +31,13 @@ else
 obj-y += $(subst ",,$(CONFIG_MTK_PLATFORM))/
 endif
 
-# ARM64 A0 compile-audit waiver.  The LP5569 Kyocera driver contains two
-# 32-bit pointer casts used only in error logging.  Preserve them as warnings
-# during the first AArch64 blocker inventory; convert the logs to %p once the
-# full compile surface is known.
+# ARM64 A0 compile-audit waivers.  These Kyocera LED drivers contain 32-bit
+# pointer casts used only in error logging.  Preserve them as warnings during
+# the first AArch64 blocker inventory; convert the logs to %p once the full
+# compile surface is known.
 ifeq ($(CONFIG_ARM64),y)
 CFLAGS_leds-lp5569kc.o += -Wno-error=pointer-to-int-cast
+CFLAGS_leds-lv5216kc.o += -Wno-error=pointer-to-int-cast
 endif
 
 # KCLIGHT_CUST +
