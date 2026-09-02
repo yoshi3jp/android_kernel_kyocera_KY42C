@@ -140,8 +140,17 @@ def validate(text):
         "CONFIG_ARM_PSCI=y",
     ]
 
-    missing = [x for x in required if x not in text]
-    bad = [x for x in forbidden if x in text]
+    # Validate complete config records, not arbitrary substrings.  The KY
+    # shipping defconfig intentionally retains commented historical/reference
+    # lines such as:
+    #   # CONFIG_TOUCHSCREEN_MTK_GT1151=y
+    #   # CONFIG_CUSTOM_KERNEL_LCM="nt35521_hd_dsi_vdo_truly_rt5081"
+    # Those are comments documenting removed reference-board choices and must
+    # not be mistaken for active Kconfig settings.
+    records = set(line.rstrip() for line in text.splitlines())
+
+    missing = [x for x in required if x not in records]
+    bad = [x for x in forbidden if x in records]
     if missing or bad:
         if missing:
             print("Missing required A0 choices:", file=sys.stderr)
