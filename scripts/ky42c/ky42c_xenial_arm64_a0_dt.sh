@@ -97,6 +97,7 @@ MERGED="$OVL.merge"
 CUST="$OUT/arch/arm64/boot/dts/k61v1_32_bsp_1g/cust.dtsi"
 LOG="$OUT/arm64-a0-dt.log"
 DUMP="$OUT/arm64-a0-merged.dts"
+DTC_DIAG="$OUT/arm64-a0-merged-dtc-diagnostics.txt"
 
 printf '\nEnvironment:\n'
 /usr/bin/python2.7 --version
@@ -125,7 +126,7 @@ check_exact '# CONFIG_MTK_DUAL_CHARGER_SUPPORT is not set'
 check_exact '# CONFIG_CHARGER_RT9465 is not set'
 
 printf '\n==> Build dtbs (includes DrvGen and dtbo_check)\n'
-rm -f "$LOG" "$DUMP"
+rm -f "$LOG" "$DUMP" "$DTC_DIAG"
 set +e
 make -C "$KERNEL_DIR" \
     O="$OUT" \
@@ -160,7 +161,32 @@ DTC="$OUT/scripts/dtc/dtc"
 }
 
 printf '\n==> Decompile merged A0 tree for semantic checks\n'
-"$DTC" -I dtb -O dts -o "$DUMP" "$MERGED"
+# MediaTek's vendor DTs contain long-standing dtc checker violations such as
+# unit-address names on nodes without reg properties (for example pinctrl
+# state nodes) and /memory without a unit address.  They are accepted by the
+# normal vendor build and are unrelated to whether ufdt overlay application
+# succeeded.  A plain dtc DTB->DTS conversion aborts on these existing checker
+# diagnostics, preventing us from inspecting an otherwise valid merged blob.
+# Use -f only for this *inspection/decompilation* pass.  The actual source DTB
+# and DTBO compilation above remains unforced and must succeed normally.
+set +e
+"$DTC" -f -I dtb -O dts -o "$DUMP" "$MERGED" 2>"$DTC_DIAG"
+dtc_rc=$?
+set -e
+
+if [[ -s "$DTC_DIAG" ]]; then
+    printf '\nMerged-tree dtc diagnostics (non-gating vendor-style checks):\n' >&2
+    cat "$DTC_DIAG" >&2
+fi
+
+[[ -s "$DUMP" ]] || {
+    echo "ERROR: forced inspection decompile produced no DTS output (dtc rc=$dtc_rc)" >&2
+    exit 5
+}
+if [[ $dtc_rc -ne 0 ]]; then
+    printf 'NOTE: inspection dtc exited rc=%d but produced %s; continuing semantic checks.\n' \
+        "$dtc_rc" "$DUMP" >&2
+fi
 
 # Confirm that the product identity applied and the fourth CPU is kept out of
 # the first experiment.  Keep these checks deliberately textual and local to
