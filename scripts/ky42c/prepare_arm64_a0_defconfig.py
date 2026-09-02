@@ -1,5 +1,7 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Generate the first KY-42C ARM64 Linux 4.9 defconfig.
+
+Compatible with the Xenial-era Python used by the MediaTek build environment.
 
 The shipping ARM32 defconfig is the product source of truth.  This tool makes
 only the narrow architecture/package substitutions required to construct the
