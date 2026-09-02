@@ -1,0 +1,47 @@
+/*
+ * KYOCERA KY-42C ARM64 bring-up overlay.
+ *
+ * Reuse the shipping FLARE product description as the product source of
+ * truth while compiling it against the ARM64 MT6761 base DTB.  Keeping the
+ * shared FLARE fragments in one place avoids an architecture-specific copy
+ * diverging before the AArch64 baseline is proven.
+ *
+ * This file is intentionally limited to the runtime-tested FLARE05[0510]
+ * board revision for the A0/A1 bring-up.  The complete shipping FLARE set
+ * can be exposed after the ARM64 baseline boots.
+ */
+
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+#include <dt-bindings/pinctrl/mt6761-pinfunc.h>
+#include <dt-bindings/mmc/mt6761-msdc.h>
+#include <dt-bindings/clock/mt6761-clk.h>
+
+/dts-v1/;
+/plugin/;
+
+#include "../../../../arm/boot/dts/mt6761-FLARE-common.dtsi"
+#include "../../../../arm/boot/dts/mt6761-FLARE05.dtsi"
+
+&odm {
+	board = "MT6761 FLARE05 0510";
+	platform_subtype = <0x05>;
+	platform_version = <0x10>;
+};
+
+/*
+ * The production KY-42C exposes three Cortex-A53 CPUs.  The ARM64 MT6761
+ * base describes all four physical cores, so keep CPU3 unavailable for the
+ * first ISA-transition experiment.  Enabling it is deliberately a separate
+ * post-bring-up experiment.
+ */
+&cpu3 {
+	status = "disabled";
+};
+
+/*
+ * DrvGen keys project generation off this include.  Preserve the shipping
+ * MediaTek project identity; k61v1_32_bsp_1g is product plumbing, not an ISA
+ * selector.
+ */
+#include <k61v1_32_bsp_1g/cust.dtsi>
