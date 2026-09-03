@@ -2523,7 +2523,7 @@ static ssize_t store_is_factory_use(struct device *dev,
 
 	pr_err("[%s] store_is_factory_use\n",__func__);
 	if (buf != NULL && size != 0) {
-		pr_debug("[%s] buf is %s and size is %d\n", __func__, buf, size);
+		pr_debug("[%s] buf is %s and size is %zu\n", __func__, buf, size);
 		ret = kstrtouint(buf, 10, &reg);
 		if (reg == 0) {
 			if (pinfo->chg1_data.is_factory_use == true) {
@@ -2567,7 +2567,7 @@ static ssize_t store_sdp_charging_current(struct device *dev,
 
 	pr_err("[%s] store_sdp_charging_current\n",__func__);
 	if (buf != NULL && size != 0) {
-		pr_debug("[%s] buf is %s and size is %d\n", __func__, buf, size);
+		pr_debug("[%s] buf is %s and size is %zu\n", __func__, buf, size);
 		ret = kstrtouint(buf, 10, &reg);
 		pinfo->chg1_data.sdp_charging_current = reg;
 		pinfo->change_current_setting(pinfo);
@@ -2612,7 +2612,7 @@ static ssize_t store_full_charging_capacity(struct device *dev,
 
 	pr_err("[%s] store_full_charging_capacity\n",__func__);
 	if (buf != NULL && size != 0) {
-		pr_debug("[%s] buf is %s and size is %d\n", __func__, buf, size);
+		pr_debug("[%s] buf is %s and size is %zu\n", __func__, buf, size);
 		ret = kstrtouint(buf, 10, &reg);
 		pinfo->chg1_data.full_charging_capacity = reg;
 		pr_debug("[%s] store_full_charging_capacity: %d\n", __func__,
@@ -2645,7 +2645,7 @@ static ssize_t store_vbat_limitation(struct device *dev,
 
 	pr_err("[%s] store_vbat_limitation\n",__func__);
 	if (buf != NULL && size != 0) {
-		pr_debug("[%s] buf is %s and size is %d\n", __func__, buf, size);
+		pr_debug("[%s] buf is %s and size is %zu\n", __func__, buf, size);
 		ret = kstrtouint(buf, 10, &reg);
 		pinfo->chg1_data.vbat_limitation = reg;
 		pr_debug("[%s] store_vbat_limitation: %d\n", __func__,
@@ -2678,7 +2678,7 @@ static ssize_t store_fact_chg_time(struct device *dev,
 
 	pr_err("[%s] store_fact_chg_time\n",__func__);
 	if (buf != NULL && size != 0) {
-		pr_debug("[%s] buf is %s and size is %d\n", __func__, buf, size);
+		pr_debug("[%s] buf is %s and size is %zu\n", __func__, buf, size);
 		ret = kstrtouint(buf, 10, &reg);
 		pinfo->chg1_data.fact_chg_time = reg;
 		pr_debug("[%s] store_fact_chg_time: %d\n", __func__,
