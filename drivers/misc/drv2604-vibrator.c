@@ -210,8 +210,8 @@ static int drv2604_i2c_write_data(struct i2c_client *client, u8 *buf, u16 len)
 
 	if (client == NULL || buf == NULL)
 	{
-		VIB_LOG(KERN_ERR, "client=0x%08x,buf=0x%08x\n",
-				(unsigned int)client, (unsigned int)buf);
+		VIB_LOG(KERN_ERR, "client=%p,buf=%p\n",
+				client, buf);
 		return 0;
 	}
 
@@ -248,8 +248,8 @@ static int drv2604_i2c_read_data(struct i2c_client *client, u8 reg, u8 *buf, u16
 
 	if (client == NULL || buf == NULL)
 	{
-		VIB_LOG(KERN_ERR, "client=0x%08x\n",
-				(unsigned int)client);
+		VIB_LOG(KERN_ERR, "client=%p\n",
+				client);
 		return 0;
 	}
 
@@ -587,9 +587,9 @@ static void drv2604_vib_on(struct work_struct *work)
 	struct vib_on_work_data *work_data = container_of
 										(work, struct vib_on_work_data, work_vib_on);
 
-	VIB_DEBUG_LOG(KERN_INFO, "called. work=0x%08x\n", (unsigned int)work);
-	VIB_DEBUG_LOG(KERN_INFO, "work_data=0x%08x,time=%d\n",
-					(unsigned int)work_data, work_data->time);
+	VIB_DEBUG_LOG(KERN_INFO, "called. work=%p\n", work);
+	VIB_DEBUG_LOG(KERN_INFO, "work_data=%p,time=%d\n",
+					work_data, work_data->time);
 	drv2604_set_vib(VIB_ON, work_data->time);
 
 	return;
@@ -597,14 +597,14 @@ static void drv2604_vib_on(struct work_struct *work)
 
 static void drv2604_vib_off(struct work_struct *work)
 {
-	VIB_DEBUG_LOG(KERN_INFO, "called. work=0x%08x\n", (unsigned int)work);
+	VIB_DEBUG_LOG(KERN_INFO, "called. work=%p\n", work);
 	drv2604_set_vib(VIB_OFF, 0);
 	return;
 }
 
 static void drv2604_vib_standby(struct work_struct *work)
 {
-	VIB_DEBUG_LOG(KERN_INFO, "called. work=0x%08x\n", (unsigned int)work);
+	VIB_DEBUG_LOG(KERN_INFO, "called. work=%p\n", work);
 
 	drv2604_set_vib(VIB_STANDBY, 0);
 	return;
@@ -614,8 +614,8 @@ static void drv2604_timed_vib_on(struct timed_output_dev *dev, int timeout_val)
 {
 	int ret = 0;
 
-	VIB_DEBUG_LOG(KERN_INFO, "called. dev=0x%08x, timeout_val=%d\n",
-					(unsigned int)dev, timeout_val);
+	VIB_DEBUG_LOG(KERN_INFO, "called. dev=%p, timeout_val=%d\n",
+					dev, timeout_val);
 	drv2604_work.vib_on_work_data[drv2604_data.work_vib_on_pos].time = timeout_val;
 
 	ret = schedule_work
@@ -639,7 +639,7 @@ static void drv2604_timed_vib_off(struct timed_output_dev *dev)
 {
 	int ret = 0;
 
-	VIB_DEBUG_LOG(KERN_INFO, "called. dev=0x%08x\n", (unsigned int)dev);
+	VIB_DEBUG_LOG(KERN_INFO, "called. dev=%p\n", dev);
 	ret = schedule_work(&drv2604_work.work_vib_off);
 	if (ret == 0)
 	{
@@ -652,7 +652,7 @@ static void drv2604_timed_vib_standby(struct timed_output_dev *dev)
 {
 	int ret = 0;
 
-	VIB_DEBUG_LOG(KERN_INFO, "called. dev=0x%08x\n", (unsigned int)dev);
+	VIB_DEBUG_LOG(KERN_INFO, "called. dev=%p\n", dev);
 	ret = schedule_work(&drv2604_work.work_vib_standby);
 	if (ret == 0)
 	{
@@ -663,7 +663,7 @@ static void drv2604_timed_vib_standby(struct timed_output_dev *dev)
 
 static void drv2604_enable(struct timed_output_dev *dev, int value)
 {
-	VIB_DEBUG_LOG(KERN_INFO, "called. dev=0x%08x,value=%d\n", (unsigned int)dev, value);
+	VIB_DEBUG_LOG(KERN_INFO, "called. dev=%p,value=%d\n", dev, value);
 	VIB_DEBUG_LOG(KERN_INFO, "add_time_flag=%d\n", drv2604_data.add_time_flag);
 
 	if (g_vib_initialized == false) {
@@ -718,7 +718,7 @@ static int drv2604_get_vib_time(struct timed_output_dev *dev)
 {
 	int ret = 0;
 
-	VIB_DEBUG_LOG(KERN_INFO, "called. dev=0x%08x\n", (unsigned int)dev);
+	VIB_DEBUG_LOG(KERN_INFO, "called. dev=%p\n", dev);
 	mutex_lock(&vib_mutex);
 
 	ret = hrtimer_active(&drv2604_data.vib_off_timer);
@@ -736,7 +736,7 @@ static int drv2604_get_vib_time(struct timed_output_dev *dev)
 
 static enum hrtimer_restart drv2604_off_timer_func(struct hrtimer *timer)
 {
-	VIB_DEBUG_LOG(KERN_INFO, "called. timer=0x%08x\n", (unsigned int)timer);
+	VIB_DEBUG_LOG(KERN_INFO, "called. timer=%p\n", timer);
 	drv2604_data.add_time_flag = VIB_ADD_TIME_FLAG_OFF;
 	VIB_DEBUG_LOG(KERN_INFO, "set add_time_flag=%d\n", drv2604_data.add_time_flag);
 
@@ -746,7 +746,7 @@ static enum hrtimer_restart drv2604_off_timer_func(struct hrtimer *timer)
 
 static enum hrtimer_restart drv2604_standby_timer_func(struct hrtimer *timer)
 {
-	VIB_DEBUG_LOG(KERN_INFO, "called. timer=0x%08x\n", (unsigned int)timer);
+	VIB_DEBUG_LOG(KERN_INFO, "called. timer=%p\n", timer);
 	drv2604_timed_vib_standby(NULL);
 	return HRTIMER_NORESTART;
 }
@@ -1014,7 +1014,7 @@ static int __devinit drv2604_probe(struct i2c_client *client, const struct i2c_d
 	int ret = 0;
 	int count = 0;
 
-	VIB_DEBUG_LOG(KERN_INFO, "called. id=0x%08x\n", (unsigned int)id);
+	VIB_DEBUG_LOG(KERN_INFO, "called. id=%p\n", id);
 	drv2604_data.drv2604_i2c_client = client;
 	drv2604_data.vib_cur_status = VIB_STANDBY;
 	drv2604_data.add_time_flag = VIB_ADD_TIME_FLAG_OFF;
@@ -1121,7 +1121,7 @@ static int32_t __devexit drv2604_remove(struct i2c_client *pst_client)
 {
 	int ret = 0;
 
-	VIB_DEBUG_LOG(KERN_INFO, "called. pst_client=0x%08x\n", (unsigned int)pst_client);
+	VIB_DEBUG_LOG(KERN_INFO, "called. pst_client=%p\n", pst_client);
 
 	timed_output_dev_unregister(&drv2604_output_dev);
 
@@ -1131,15 +1131,15 @@ static int32_t __devexit drv2604_remove(struct i2c_client *pst_client)
 
 static int32_t drv2604_suspend(struct i2c_client *pst_client, pm_message_t mesg)
 {
-	VIB_DEBUG_LOG(KERN_INFO, "called. pst_client=0x%08x,mesg=%d\n",
-					(unsigned int)pst_client, mesg.event);
+	VIB_DEBUG_LOG(KERN_INFO, "called. pst_client=%p,mesg=%d\n",
+					pst_client, mesg.event);
 	VIB_DEBUG_LOG(KERN_INFO, "end.\n");
 	return 0;
 }
 
 static int32_t drv2604_resume(struct i2c_client *pst_client)
 {
-	VIB_DEBUG_LOG(KERN_INFO, "called. pst_client=0x%08x\n", (unsigned int)pst_client);
+	VIB_DEBUG_LOG(KERN_INFO, "called. pst_client=%p\n", pst_client);
 	VIB_DEBUG_LOG(KERN_INFO, "end.\n");
 	return 0;
 }

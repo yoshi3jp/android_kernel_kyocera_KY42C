@@ -66,15 +66,6 @@ obj-$(CONFIG_TI_VIBRATOR)	+= drv2604-vibrator.o
 obj-$(CONFIG_USB_EXT_TYPE_C_PERICOM)	+= type-c-pericom.o
 obj-$(CONFIG_KC_USB_SWIC)	+= swic/
 
-# ARM64 A0 compile-audit waiver.  The KY vibrator driver uses 32-bit integer
-# casts only to print kernel pointer values.  Keep those sites visible as
-# warnings while allowing the first AArch64 compile to continue far enough to
-# inventory additional ISA-port blockers.  Replace the casts with %p before
-# this waiver is removed for the stabilized port.
-ifeq ($(CONFIG_ARM64),y)
-CFLAGS_drv2604-vibrator.o += -Wno-error=pointer-to-int-cast
-endif
-
 lkdtm-$(CONFIG_LKDTM)		+= lkdtm_core.o
 lkdtm-$(CONFIG_LKDTM)		+= lkdtm_bugs.o
 lkdtm-$(CONFIG_LKDTM)		+= lkdtm_heap.o
