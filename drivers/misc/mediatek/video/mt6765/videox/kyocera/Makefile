@@ -9,17 +9,6 @@
 #obj-y += kdisp_debug.o
 #obj-y += kdisp_panel.o
 
-# ARM64 A0 compile-audit waivers for the KY subdisplay cluster.  The current
-# AArch32 code contains numerous pointer-to-32-bit casts and 32-bit printf
-# formats used only for diagnostic output (including size_t and dma_addr_t
-# values).  Keep those diagnostics visible as warnings while allowing the
-# first AArch64 compile to continue and expose later blockers.  These are not
-# stabilized-port fixes; convert the affected logs to %p/%zu/appropriate DMA
-# formatting and remove these waivers once the full compile surface is known.
-ifeq ($(CONFIG_ARM64),y)
-ccflags-y += -Wno-error=pointer-to-int-cast -Wno-error=format
-endif
-
 obj-y += disp_ext_sub.o
 obj-y += disp_ext_sub_ctrl.o
 obj-y += disp_ext_sub_panel.o

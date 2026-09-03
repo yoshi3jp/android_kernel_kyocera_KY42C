@@ -116,8 +116,8 @@ int disp_ext_sub_pan_display_ctrl (
 	pr_debug("%s start\n",__func__);
 
 	if( (!var) || (!info) ){
-		pr_err("%s end - bad parm var[%x] info[%x]\n",
-				__func__,(unsigned int)var, (unsigned int)info);
+		pr_err("%s end - bad parm var[%p] info[%p]\n",
+				__func__,var, info);
 		return -ENODEV;
 	}
 
@@ -153,8 +153,8 @@ static uint8_t* disp_ext_sub_get_img(
 	pr_debug("%s start\n",__func__);
 
 	if( (!var) || (!info) ){
-		pr_err("%s end - bad parm var[%x] info[%x]\n",
-				__func__,(unsigned int)var, (unsigned int)info);
+		pr_err("%s end - bad parm var[%p] info[%p]\n",
+				__func__,var, info);
 		return NULL;
 	}
 
@@ -359,7 +359,7 @@ int disp_ext_sub_register_framebuffer(
 	/* allocate buffer */
 	size = (pdata->xres) * (pdata->yres) * (pdata->bpp / 8 ) * DISP_EXT_SUB_FB_NUM;
 	virt = dmam_alloc_coherent(&pdev->dev, size, &phys, GFP_KERNEL);
-	pr_debug("%s size=%d vir_addr=%p phys_addr=%08x\n",__func__, size, virt, phys);
+	pr_debug("%s size=%zu vir_addr=%p phys_addr=%pad\n",__func__, size, virt, &phys);
 
 	/* Set fix info */
 	fbi->screen_base = virt;
