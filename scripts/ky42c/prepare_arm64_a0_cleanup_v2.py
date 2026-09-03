@@ -3,18 +3,10 @@
 """Boundary-safe runner for prepare_arm64_a0_cleanup.py.
 
 The original A0 cleanup deliberately validates occurrence counts before it
-writes anything.  Some of its short format-string fragments can also occur as
-substrings of longer identifiers in disabled/commented legacy code (for
-example `client=...` inside `pst_client=...`).  This runner keeps strict count
+writes anything. Some short format-string fragments can occur inside longer
+identifiers in disabled/commented legacy code. This runner keeps strict count
 validation, makes replacements identifier-boundary aware, and treats the
-A0-observed counts in the KY subdisplay files as *minimum active-code counts*.
-
-That last distinction matters because the ST7571/LD7032 sources contain
-compile-time-disabled legacy paths guarded by HW_SPI/feature conditionals.  A0
-only reported the active instances, while source-wide cleanup must also fix the
-same pointer-format idiom in dormant copies.  For explicitly pointer-only
-subdisplay replacements, extra exact matches are therefore cleaned as well;
-all other replacements remain exact-count validated.
+A0-observed counts in KY-specific dormant pointer diagnostics as lower bounds.
 """
 
 from __future__ import print_function
@@ -67,18 +59,14 @@ def replace_expected(text, old, new, expected, path, label):
     if old_count == expected:
         return re.sub(old_pattern, lambda _match: new, text), expected
 
-    # The A0 warning inventory only counted compiled branches.  The KY
-    # subdisplay sources carry duplicate pointer diagnostics in dormant
-    # HW_SPI/feature branches.  These exact pointer-only idioms should be
-    # source-wide width-clean, so accept extra matches there while retaining
-    # the A0 count as a lower-bound sanity check.
+    # A0 only reported compiled subdisplay branches. Clean the same exact
+    # pointer-only idiom in dormant HW_SPI/feature branches as well.
     if (old_count > expected and
             is_subdisplay_pointer_cleanup(path, label)):
         print("expand %3d->%-3d  %s: %s" %
               (expected, old_count, path, label))
         return re.sub(old_pattern, lambda _match: new, text), old_count
 
-    # Preserve the original tool's idempotent second-run behavior.
     if old_count == 0 and new_count >= expected:
         return text, 0
 
@@ -89,6 +77,33 @@ def replace_expected(text, old, new, expected, path, label):
 
 
 IMPL.replace_expected = replace_expected
+
+# The DRV2604 source also contains a completely commented legacy
+# remove/suspend/resume block. The A0 compiler never saw it, but the final
+# source-wide residual check correctly notices its pointer-to-u32 diagnostics.
+# Keep those comments width-clean too rather than weakening the validator.
+_ORIG_FIX_DRV2604 = IMPL.fix_drv2604
+
+
+def fix_drv2604_sourcewide():
+    path, original, text, total = _ORIG_FIX_DRV2604()
+    extras = [
+        ("legacy pst_client pointer format",
+         "called. pst_client=0x%08x\\n",
+         "called. pst_client=%p\\n", 2),
+        ("legacy pst_client/mesg pointer format",
+         "called. pst_client=0x%08x,mesg=%d\\n",
+         "called. pst_client=%p,mesg=%d\\n", 1),
+        ("legacy pst_client pointer cast",
+         "(unsigned int)pst_client", "pst_client", 3),
+    ]
+    for label, old, new, expected in extras:
+        text, n = replace_expected(text, old, new, expected, path, label)
+        total += n
+    return path, original, text, total
+
+
+IMPL.fix_drv2604 = fix_drv2604_sourcewide
 
 if __name__ == "__main__":
     sys.exit(IMPL.main())
